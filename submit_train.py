@@ -58,7 +58,7 @@ if __name__ == '__main__':
 
     # prepare the parameters for run_summarization.py
     cur_dir = os.path.dirname(os.path.abspath(__file__))
-    fname_to_run = 'example_script.py'
+    fname_to_run = 'run_script.py'
     full_fname_to_run = os.path.join(cur_dir, fname_to_run)
     params_str = " ".join(extra_args)
     command_to_run = f'python {full_fname_to_run} train -o {data_dir} {params_str}'

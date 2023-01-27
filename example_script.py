@@ -1,13 +1,24 @@
 import argparse
+from typing import Tuple
 
 from datasets import load_dataset, Dataset
 from transformers import AutoTokenizer, DataCollatorWithPadding, \
-    PreTrainedTokenizerBase
+    PreTrainedTokenizerBase, PreTrainedModel
 import torch
 
 from bert_modeling import ContrastiveBertConfig, \
     ContrastiveBertForSequenceClassification
 from trainer import train, sequence_classification_preprocess_dataset
+
+
+def get_model_and_tokenizer(model_name_or_path: str) -> Tuple[PreTrainedModel, PreTrainedTokenizerBase]:
+    config = ContrastiveBertConfig.from_pretrained(model_name_or_path)
+    config.num_labels = 2
+    config.classifiers_layers = [12, 8, 4]
+    tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
+    model = ContrastiveBertForSequenceClassification.from_pretrained(model_name_or_path, config=config)
+
+    return model, tokenizer
 
 
 def preprocess_sst_dataset(dataset: Dataset, tokenizer: PreTrainedTokenizerBase) -> Dataset:
@@ -26,6 +37,9 @@ def preprocess_sst_dataset(dataset: Dataset, tokenizer: PreTrainedTokenizerBase)
 
 
 def train_script(output_dir: str):
+    model, tokenizer = get_model_and_tokenizer("bert-base-cased")
+    data_collator = DataCollatorWithPadding(tokenizer)
+
     train_dataset = load_dataset("sst2", split="train").select(range(10000))
     dev_dataset = load_dataset("sst2", split="validation")
 
@@ -33,6 +47,30 @@ def train_script(output_dir: str):
     dev_dataset = preprocess_sst_dataset(dev_dataset, tokenizer)
 
     train(model, tokenizer, train_dataset, dev_dataset, data_collator, output_dir, 20)
+
+
+def predict_script(model_name_or_path: str, output_dir: str):
+    model, tokenizer = get_model_and_tokenizer(model_name_or_path)
+    model.cuda()
+
+    dev_dataset = load_dataset("sst2", split="validation")
+    inputs = dev_dataset['sentence']
+    labels = dev_dataset['label']
+
+    logits_per_classifier = {l: torch.empty(0, model.config.num_labels, device="cuda")
+                             for l in model.config.classifiers_layers}
+    with torch.no_grad():
+        batch_size = 8
+        for i in range(0, len(inputs), batch_size):
+            tokenized_inputs = tokenizer(inputs[i:min(i + batch_size, len(inputs))],
+                                         padding=True,
+                                         add_special_tokens=False,
+                                         return_tensors="pt").to("cuda")
+            batch_logits = model(**tokenized_inputs).logits
+            for layer, l_logits in batch_logits.items():
+                logits_per_classifier[layer] = torch.concat([logits_per_classifier[layer], l_logits])
+
+    print("end")
 
 
 def inference_script():
@@ -66,16 +104,15 @@ if __name__ == '__main__':
     parser_train.add_argument('-o', '--output-dir', required=True, type=str)
     # endregion
 
-    config = ContrastiveBertConfig.from_pretrained("bert-base-cased")
-    config.num_labels = 2
-    config.classifiers_layers = [12, 8, 4]
-    tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
-    model = ContrastiveBertForSequenceClassification.from_pretrained("bert-base-cased", config=config)
-    data_collator = DataCollatorWithPadding(tokenizer)
+    # region Predict argparser
+    parser_predict = subparsers.add_parser('predict', help='Train Agent Assist Summarizer')
+    parser_predict.set_defaults(which='predict')
+    parser_predict.add_argument('-o', '--output-dir', required=True, type=str)
+    # endregion
 
     args = parser.parse_args()
 
     if args.which == "train":
         train_script(args.output_dir)
-
-
+    if args.which == "predict":
+        predict_script("temp/checkpoint-250", args.output_dir)

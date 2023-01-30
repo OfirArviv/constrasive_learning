@@ -71,7 +71,7 @@ def train(model: PreTrainedModel,
         tokenizer=tokenizer,
         data_collator=data_collator,
         compute_metrics=get_fscore_eval_func(model.config.num_labels),
-        callbacks=[EarlyStoppingCallback(early_stopping_patience=5)],
+        callbacks=[EarlyStoppingCallback(early_stopping_patience=5)]
     )
 
     trainer.train()

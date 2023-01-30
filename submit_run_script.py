@@ -25,7 +25,7 @@ GPU_TYPE = 'v100'  # currently we can't run on a100, see README.md
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('-o', '--log-dir', type=str, default=None,
+    parser.add_argument('-o', '--output-dir', type=str, required=True,
                         help='the dir to write the ccc job log into. If none is provided, the default is the curr dir')
     parser.add_argument('--duration', type=str, default='24h',
                         help='the desired job duration. possible values: 1h, 6h, 12h, 24h')
@@ -38,30 +38,30 @@ if __name__ == '__main__':
 
     args, extra_args = parser.parse_known_args()
 
-    if args.log_dir is None:
-        logdir = os.getcwd()
-    else:
-        logdir = args.log_dir
-    log_dir = os.path.join(logdir, 'log')
+    output_dir = args.output_dir
+    log_dir = os.path.join(output_dir, 'log')
     os.makedirs(log_dir, exist_ok=True)
+    print(f'Logging to {log_dir}')
+
     experiment_name = f'{args.experiment_name}'
     i = 0
     while os.path.isfile(os.path.join(log_dir, experiment_name + '_out.txt')):
         experiment_name = f'{args.experiment_name}_{i}'
         i += 1
-    print(f'Logging to {log_dir}')
+
     out_fname = os.path.join(log_dir, experiment_name + '_out.txt')
     err_fname = os.path.join(log_dir, experiment_name + '_err.txt')
 
-    data_dir = os.path.join(logdir, 'data', experiment_name)
+    data_dir = os.path.join(output_dir, 'data', experiment_name)
     os.makedirs(data_dir, exist_ok=True)
+    print(f'Writing data to {log_dir}')
 
-    # prepare the parameters for run_summarization.py
+    # prepare the parameters for py file
     cur_dir = os.path.dirname(os.path.abspath(__file__))
     fname_to_run = 'run_script.py'
     full_fname_to_run = os.path.join(cur_dir, fname_to_run)
     params_str = " ".join(extra_args)
-    command_to_run = f'python {full_fname_to_run} train -o {data_dir} {params_str}'
+    command_to_run = f'python {full_fname_to_run} -o {data_dir} {params_str}'
 
     print(f'experiment_name: {args.experiment_name}')
     print(f'duration: {args.duration}')

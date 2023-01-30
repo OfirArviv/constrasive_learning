@@ -20,12 +20,11 @@ from trainer import train
 
 
 # region Dataset processing
-def basic_sequence_classification_preprocess_dataset(examples,
-                                                     tokenizer: PreTrainedTokenizerBase,
-                                                     input_column: str,
-                                                     label_column: str,
-                                                     max_source_length: int,
-                                                     max_target_length: int):
+def preprocess_basic_classification_example(examples,
+                                            tokenizer: PreTrainedTokenizerBase,
+                                            input_column: str,
+                                            label_column: str,
+                                            max_source_length: int):
     # remove pairs where at least one record is None
     inputs, labels = [], []
     for i in range(len(examples[input_column])):
@@ -43,27 +42,28 @@ def basic_sequence_classification_preprocess_dataset(examples,
     return model_inputs
 
 
-def preprocess_sst_dataset(dataset: Dataset, tokenizer: PreTrainedTokenizerBase) -> Dataset:
-    source_column = "sentence"
-    target_column = "label"
+def preprocess_basic_classification_dataset(dataset: Dataset,
+                                            tokenizer: PreTrainedTokenizerBase,
+                                            source_column: str,
+                                            target_column: str
+                                            ) -> Dataset:
     max_seq_length = 512
-    return dataset.map(lambda examples: basic_sequence_classification_preprocess_dataset(examples,
-                                                                                         tokenizer,
-                                                                                         source_column,
-                                                                                         target_column,
-                                                                                         max_seq_length,
-                                                                                         max_seq_length),
+    return dataset.map(lambda examples: preprocess_basic_classification_example(examples,
+                                                                                tokenizer,
+                                                                                source_column,
+                                                                                target_column,
+                                                                                max_seq_length),
                        remove_columns=dataset.column_names,
                        batched=True,
                        load_from_cache_file=False)
 
 
-def snli_sequence_classification_preprocess_dataset(examples,
-                                                    tokenizer: PreTrainedTokenizerBase,
-                                                    input_column_1: str,
-                                                    input_column_2: str,
-                                                    label_column: str,
-                                                    max_source_length: int):
+def preprocess_pair_classification_example(examples,
+                                           tokenizer: PreTrainedTokenizerBase,
+                                           input_column_1: str,
+                                           input_column_2: str,
+                                           label_column: str,
+                                           max_source_length: int):
     # remove pairs where at least one record is None
     inputs, labels = [], []
     for i in range(len(examples[input_column_1])):
@@ -83,28 +83,29 @@ def snli_sequence_classification_preprocess_dataset(examples,
     return model_inputs
 
 
-def preprocess_snli_dataset(dataset: Dataset, tokenizer: PreTrainedTokenizerBase) -> Dataset:
-    input_column_1 = "premise"
-    input_column_2 = "hypothesis"
-    target_column = "label"
+def preprocess_pair_classification_dataset(dataset: Dataset,
+                                           tokenizer: PreTrainedTokenizerBase,
+                                           input_column_1: str,
+                                           input_column_2: str,
+                                           label_column: str, ) -> Dataset:
     max_seq_length = 512
-    return dataset.map(lambda examples: snli_sequence_classification_preprocess_dataset(examples,
-                                                                                        tokenizer,
-                                                                                        input_column_1,
-                                                                                        input_column_2,
-                                                                                        target_column,
-                                                                                        max_seq_length),
+    return dataset.map(lambda examples: preprocess_pair_classification_example(examples,
+                                                                               tokenizer,
+                                                                               input_column_1,
+                                                                               input_column_2,
+                                                                               label_column,
+                                                                               max_seq_length),
                        remove_columns=dataset.column_names,
                        batched=True,
                        load_from_cache_file=False)
 
 
-def boolq_sequence_classification_preprocess_dataset(examples,
-                                                     tokenizer: PreTrainedTokenizerBase,
-                                                     question_column: str,
-                                                     context_column: str,
-                                                     label_column: str,
-                                                     max_source_length: int):
+def preprocess_qa_classification_example(examples,
+                                         tokenizer: PreTrainedTokenizerBase,
+                                         question_column: str,
+                                         context_column: str,
+                                         label_column: str,
+                                         max_source_length: int):
     # remove pairs where at least one record is None
     inputs, labels = [], []
     for i in range(len(examples[question_column])):
@@ -124,17 +125,19 @@ def boolq_sequence_classification_preprocess_dataset(examples,
     return model_inputs
 
 
-def preprocess_boolq_dataset(dataset: Dataset, tokenizer: PreTrainedTokenizerBase) -> Dataset:
-    question_column = "question"
-    context_column = "passage"
-    target_column = "label"
+def preprocess_qa_classification_dataset(dataset: Dataset,
+                                         tokenizer: PreTrainedTokenizerBase,
+                                         question_column: str,
+                                         context_column: str,
+                                         label_column: str,
+                                         ) -> Dataset:
     max_seq_length = 512
-    return dataset.map(lambda examples: boolq_sequence_classification_preprocess_dataset(examples,
-                                                                                         tokenizer,
-                                                                                         question_column,
-                                                                                         context_column,
-                                                                                         target_column,
-                                                                                         max_seq_length),
+    return dataset.map(lambda examples: preprocess_qa_classification_example(examples,
+                                                                             tokenizer,
+                                                                             question_column,
+                                                                             context_column,
+                                                                             label_column,
+                                                                             max_seq_length),
                        remove_columns=dataset.column_names,
                        batched=True,
                        load_from_cache_file=False)
@@ -143,21 +146,74 @@ def preprocess_boolq_dataset(dataset: Dataset, tokenizer: PreTrainedTokenizerBas
 def get_processed_dataset(dataset_key: str, split: str, tokenizer: PreTrainedTokenizerBase,
                           size: Optional[int] = None) -> Dataset:
     if dataset_key == "sst2":
-        dataset_preprocess_func = preprocess_sst_dataset
+        dataset_specific_args = {
+            "source_column": "sentence",
+            "target_column": "label",
+        }
+        dataset_preprocess_func = preprocess_basic_classification_dataset
         dataset = load_dataset(dataset_key, split=split)
     elif dataset_key == "snli":
-        dataset_preprocess_func = preprocess_snli_dataset
+        dataset_specific_args = {
+            "input_column_1": "premise",
+            "input_column_2": "hypothesis",
+            "label_column": "label",
+        }
+        dataset_preprocess_func = preprocess_pair_classification_dataset
         dataset = load_dataset(dataset_key, split=split)
     elif dataset_key == "boolq":
-        dataset_preprocess_func = preprocess_boolq_dataset
+        dataset_specific_args = {
+            "input_column_1": "question",
+            "input_column_2": "passage",
+            "label_column": "label",
+        }
+        dataset_preprocess_func = preprocess_pair_classification_dataset
         dataset = load_dataset("super_glue", name="boolq", split=split)
+    elif dataset_key == "wnli":
+        dataset_specific_args = {
+            "input_column_1": "sentence1",
+            "input_column_2": "sentence2",
+            "target_column": "label",
+        }
+        dataset_preprocess_func = preprocess_pair_classification_dataset
+        dataset = load_dataset("glue", name="wnli", split=split)
+    elif dataset_key == "cola":
+        dataset_specific_args = {
+            "source_column": "sentence",
+            "target_column": "label",
+        }
+        dataset_preprocess_func = preprocess_basic_classification_dataset
+        dataset = load_dataset("super_glue", name="cola", split=split)
+    elif dataset_key == "ax":
+        dataset_specific_args = {
+            "input_column_1": "premise",
+            "input_column_2": "hypothesis",
+            "label_column": "label",
+        }
+        dataset_preprocess_func = preprocess_pair_classification_dataset
+        dataset = load_dataset("glue", name="ax", split=split)
+    elif dataset_key == "mrpc":
+        dataset_specific_args = {
+            "input_column_1": "sentence1",
+            "input_column_2": "sentence2",
+            "target_column": "label",
+        }
+        dataset_preprocess_func = preprocess_pair_classification_dataset
+        dataset = load_dataset("glue", name="mrcp", split=split)
+    elif dataset_key == "qqp":
+        dataset_specific_args = {
+            "input_column_1": "sentence1",
+            "input_column_2": "sentence2",
+            "target_column": "label",
+        }
+        dataset_preprocess_func = preprocess_pair_classification_dataset
+        dataset = load_dataset("glue", name="qqp", split=split)
     else:
         raise NotImplementedError(dataset_key)
 
     if size is not None:
         size = min(size, len(dataset))
         dataset = dataset.shuffle(seed=42).select(range(size))
-    dataset = dataset_preprocess_func(dataset, tokenizer)
+    dataset = dataset_preprocess_func(dataset, tokenizer, **dataset_specific_args)
 
     return dataset
 
@@ -188,10 +244,10 @@ def get_score(labels: List[int], prediction_per_classifier: Dict[str, List[int]]
     return res_dict
 
 
-def get_model_and_tokenizer(model_name_or_path: str,
-                            num_labels: Optional[int] = None,
-                            share_classifiers_weights: Optional[bool] = None
-                            ) -> Tuple[PreTrainedModel, PreTrainedTokenizerBase]:
+def get_model(model_name_or_path: str,
+              num_labels: Optional[int] = None,
+              share_classifiers_weights: Optional[bool] = None
+              ) -> PreTrainedModel:
     config = ContrastiveBertConfig.from_pretrained(model_name_or_path)
     if config.classifiers_layers is None:
         assert share_classifiers_weights is not None, 'share_classifiers_weights is None. Config does not contain ' \
@@ -201,31 +257,39 @@ def get_model_and_tokenizer(model_name_or_path: str,
         config.classifiers_layers = [4, 8, 12]
         config.share_classifiers_weights = share_classifiers_weights
 
-    config.num_labels = 3
+    # config.num_labels = num_labels
 
-    tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
     model = ContrastiveBertForSequenceClassification.from_pretrained(model_name_or_path, config=config)
 
-    return model, tokenizer
+    return model
+
+
+def get_tokenizer(model_name_or_path: str) -> PreTrainedTokenizerBase:
+    tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
+    return tokenizer
 
 
 def train_script(dataset_key: str, share_classifiers_weights: bool, output_dir: str):
-    num_labels = 3 if dataset_key == "snli" else 2
+    model_name = "bert-base-cased"
+    tokenizer = get_tokenizer(model_name)
 
-    model, tokenizer = get_model_and_tokenizer("bert-base-cased", num_labels, share_classifiers_weights)
+    train_dataset = get_processed_dataset(dataset_key, "train", tokenizer, 10000)
+    dev_dataset = get_processed_dataset(dataset_key, "validation", tokenizer, 2000)
+
+    num_labels = len(set(train_dataset['labels']))
+
+    model = get_model(model_name, num_labels, share_classifiers_weights)
     data_collator = DataCollatorWithPadding(tokenizer)
 
     use_cpu = False
     model.to("cpu" if use_cpu else "cuda")
 
-    train_dataset = get_processed_dataset(dataset_key, "train", tokenizer, 10000)
-    dev_dataset = get_processed_dataset(dataset_key, "validation", tokenizer, 2000)
-
     train(model, tokenizer, train_dataset, dev_dataset, data_collator, output_dir, 5, no_cuda=use_cpu)
 
 
 def predict_script(model_name_or_path: str, dataset_key: str) -> Tuple[Dict[int, torch.Tensor], List[int]]:
-    model, tokenizer = get_model_and_tokenizer(model_name_or_path)
+    tokenizer = get_tokenizer(model_name_or_path)
+    model = get_model(model_name_or_path)
     model.cuda()
 
     dev_dataset = get_processed_dataset(dataset_key, "validation", tokenizer, 2000)

@@ -61,7 +61,7 @@ if __name__ == '__main__':
     fname_to_run = 'run_script.py'
     full_fname_to_run = os.path.join(cur_dir, fname_to_run)
     params_str = " ".join(extra_args)
-    command_to_run = f'python {full_fname_to_run} -o {data_dir} {params_str}'
+    command_to_run = f'python {full_fname_to_run} {params_str} -o {data_dir} '
 
     print(f'experiment_name: {args.experiment_name}')
     print(f'duration: {args.duration}')

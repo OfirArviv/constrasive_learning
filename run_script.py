@@ -198,7 +198,7 @@ def get_processed_dataset(dataset_key: str, split: str, tokenizer: PreTrainedTok
             "label_column": "label",
         }
         dataset_preprocess_func = preprocess_pair_classification_dataset
-        dataset = load_dataset("glue", name="mrcp", split=split)
+        dataset = load_dataset("glue", name="mrpc", split=split)
     elif dataset_key == "qqp":
         dataset_specific_args = {
             "input_column_1": "question1",

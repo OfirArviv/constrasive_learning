@@ -45,13 +45,13 @@ def preprocess_basic_classification_example(examples,
 def preprocess_basic_classification_dataset(dataset: Dataset,
                                             tokenizer: PreTrainedTokenizerBase,
                                             source_column: str,
-                                            target_column: str
+                                            label_column: str
                                             ) -> Dataset:
     max_seq_length = 512
     return dataset.map(lambda examples: preprocess_basic_classification_example(examples,
                                                                                 tokenizer,
                                                                                 source_column,
-                                                                                target_column,
+                                                                                label_column,
                                                                                 max_seq_length),
                        remove_columns=dataset.column_names,
                        batched=True,
@@ -148,7 +148,7 @@ def get_processed_dataset(dataset_key: str, split: str, tokenizer: PreTrainedTok
     if dataset_key == "sst2":
         dataset_specific_args = {
             "source_column": "sentence",
-            "target_column": "label",
+            "label_column": "label",
         }
         dataset_preprocess_func = preprocess_basic_classification_dataset
         dataset = load_dataset(dataset_key, split=split)
@@ -172,14 +172,14 @@ def get_processed_dataset(dataset_key: str, split: str, tokenizer: PreTrainedTok
         dataset_specific_args = {
             "input_column_1": "sentence1",
             "input_column_2": "sentence2",
-            "target_column": "label",
+            "label_column": "label",
         }
         dataset_preprocess_func = preprocess_pair_classification_dataset
         dataset = load_dataset("glue", name="wnli", split=split)
     elif dataset_key == "cola":
         dataset_specific_args = {
             "source_column": "sentence",
-            "target_column": "label",
+            "label_column": "label",
         }
         dataset_preprocess_func = preprocess_basic_classification_dataset
         dataset = load_dataset("super_glue", name="cola", split=split)
@@ -195,7 +195,7 @@ def get_processed_dataset(dataset_key: str, split: str, tokenizer: PreTrainedTok
         dataset_specific_args = {
             "input_column_1": "sentence1",
             "input_column_2": "sentence2",
-            "target_column": "label",
+            "label_column": "label",
         }
         dataset_preprocess_func = preprocess_pair_classification_dataset
         dataset = load_dataset("glue", name="mrcp", split=split)
@@ -203,7 +203,7 @@ def get_processed_dataset(dataset_key: str, split: str, tokenizer: PreTrainedTok
         dataset_specific_args = {
             "input_column_1": "sentence1",
             "input_column_2": "sentence2",
-            "target_column": "label",
+            "label_column": "label",
         }
         dataset_preprocess_func = preprocess_pair_classification_dataset
         dataset = load_dataset("glue", name="qqp", split=split)

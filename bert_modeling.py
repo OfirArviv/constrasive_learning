@@ -18,25 +18,26 @@ class MultiHeadTokenClassifierOutput(TokenClassifierOutput):
     loss_per_classifier: Optional[Dict[int, torch.FloatTensor]] = None
     logits_per_classifier: Dict[int, torch.FloatTensor] = None
 
+
 @dataclass
 class MultiHeadSequenceClassifierOutput(SequenceClassifierOutput):
     loss_per_classifier: Optional[Dict[int, torch.FloatTensor]] = None
     logits_per_classifier: Dict[int, torch.FloatTensor] = None
 
 
-
-
 class ContrastiveBertConfig(BertConfig):
     def __init__(
             self,
             num_labels: int = 2,
-            classifiers_layers: List[int] = [],
+            classifiers_layers: Optional[List[int]] = None,
+            share_classifiers_weights: bool = False,
             **kwargs
     ):
         super().__init__(**kwargs)
 
         self.classifiers_layers = classifiers_layers
         self.num_labels = num_labels
+        self.share_classifiers_weights = share_classifiers_weights
 
 
 @add_start_docstrings(
@@ -46,94 +47,95 @@ class ContrastiveBertConfig(BertConfig):
     """,
     BERT_START_DOCSTRING,
 )
-class ContrastiveBertForTokenClassification(BertPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
-
-    def __init__(self, config: ContrastiveBertConfig):
-        super().__init__(config)
-        self.num_labels = config.num_labels
-
-        self.bert = BertModel(config, add_pooling_layer=False)
-        classifier_dropout = (
-            config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
-        )
-        self.dropout = nn.Dropout(classifier_dropout)
-
-        classifiers_layers = config.classifiers_layers
-        self.classifiers = {k: nn.Linear(config.hidden_size, config.num_labels) for k in classifiers_layers}
-        # self.classifier = nn.Linear(config.hidden_size, config.num_labels)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_TOKEN_CLASSIFICATION,
-        output_type=TokenClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output=_TOKEN_CLASS_EXPECTED_OUTPUT,
-        expected_loss=_TOKEN_CLASS_EXPECTED_LOSS,
-    )
-    def forward(
-            self,
-            input_ids: Optional[torch.Tensor] = None,
-            attention_mask: Optional[torch.Tensor] = None,
-            token_type_ids: Optional[torch.Tensor] = None,
-            position_ids: Optional[torch.Tensor] = None,
-            head_mask: Optional[torch.Tensor] = None,
-            inputs_embeds: Optional[torch.Tensor] = None,
-            labels: Optional[torch.Tensor] = None,
-            output_attentions: Optional[bool] = None,
-            output_hidden_states: Optional[bool] = None,
-            return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], TokenClassifierOutput]:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
-        """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        output_hidden_states = True
-        outputs = self.bert(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        # sequence_output = outputs[0]
-        # sequence_output = self.dropout(sequence_output)
-        sequence_outputs = {k: self.dropout(outputs.hidden_states[k]) for k in self.classifiers.keys()}
-
-        # logits = self.classifier(sequence_output)
-        logits_per_classifier = {k: self.classifiers[k](sequence_outputs[k]) for k in self.classifiers.keys()}
-
-        loss = None
-        loss_per_classifier = None
-        if labels is not None:
-            loss_fct = CrossEntropyLoss()
-            # loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-            loss_per_classifier = {k: loss_fct(logits_per_classifier[k].view(-1, self.num_labels), labels.view(-1))
-                                   for k in self.classifiers.keys()}
-            loss = torch.stack(list(loss_per_classifier.values())).sum()
-
-        if not return_dict:
-            # output = (logits,) + outputs[2:]
-            # return ((loss,) + output) if loss is not None else output
-            return loss if loss is not None else outputs
-
-        return MultiHeadTokenClassifierOutput(
-            loss=loss,
-            loss_per_classifier=loss_per_classifier,
-            logits_per_classifier=logits_per_classifier,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
-
+# class ContrastiveBertForTokenClassification(BertPreTrainedModel):
+#     _keys_to_ignore_on_load_unexpected = [r"pooler"]
+#
+#     def __init__(self, config: ContrastiveBertConfig):
+#         super().__init__(config)
+#         self.num_labels = config.num_labels
+#
+#         self.bert = BertModel(config, add_pooling_layer=False)
+#         classifier_dropout = (
+#             config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
+#         )
+#         self.dropout = nn.Dropout(classifier_dropout)
+#
+#         classifiers_layers = config.classifiers_layers
+#
+#         self.classifiers = nn.ModuleDict({k: nn.Linear(config.hidden_size, config.num_labels)
+#                                           for k in classifiers_layers})
+#
+#         # Initialize weights and apply final processing
+#         self.post_init()
+#
+#     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+#     @add_code_sample_docstrings(
+#         checkpoint=_CHECKPOINT_FOR_TOKEN_CLASSIFICATION,
+#         output_type=TokenClassifierOutput,
+#         config_class=_CONFIG_FOR_DOC,
+#         expected_output=_TOKEN_CLASS_EXPECTED_OUTPUT,
+#         expected_loss=_TOKEN_CLASS_EXPECTED_LOSS,
+#     )
+#     def forward(
+#             self,
+#             input_ids: Optional[torch.Tensor] = None,
+#             attention_mask: Optional[torch.Tensor] = None,
+#             token_type_ids: Optional[torch.Tensor] = None,
+#             position_ids: Optional[torch.Tensor] = None,
+#             head_mask: Optional[torch.Tensor] = None,
+#             inputs_embeds: Optional[torch.Tensor] = None,
+#             labels: Optional[torch.Tensor] = None,
+#             output_attentions: Optional[bool] = None,
+#             output_hidden_states: Optional[bool] = None,
+#             return_dict: Optional[bool] = None,
+#     ) -> Union[Tuple[torch.Tensor], TokenClassifierOutput]:
+#         r"""
+#         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+#             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
+#         """
+#         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+#         output_hidden_states = True
+#         outputs = self.bert(
+#             input_ids,
+#             attention_mask=attention_mask,
+#             token_type_ids=token_type_ids,
+#             position_ids=position_ids,
+#             head_mask=head_mask,
+#             inputs_embeds=inputs_embeds,
+#             output_attentions=output_attentions,
+#             output_hidden_states=output_hidden_states,
+#             return_dict=return_dict,
+#         )
+#
+#         # sequence_output = outputs[0]
+#         # sequence_output = self.dropout(sequence_output)
+#         sequence_outputs = {k: self.dropout(outputs.hidden_states[k]) for k in self.classifiers.keys()}
+#
+#         # logits = self.classifier(sequence_output)
+#         logits_per_classifier = {k: self.classifiers[k](sequence_outputs[k]) for k in self.classifiers.keys()}
+#
+#         loss = None
+#         loss_per_classifier = None
+#         if labels is not None:
+#             loss_fct = CrossEntropyLoss()
+#             # loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+#             loss_per_classifier = {k: loss_fct(logits_per_classifier[k].view(-1, self.num_labels), labels.view(-1))
+#                                    for k in self.classifiers.keys()}
+#             loss = torch.stack(list(loss_per_classifier.values())).sum()
+#
+#         if not return_dict:
+#             # output = (logits,) + outputs[2:]
+#             # return ((loss,) + output) if loss is not None else output
+#             return loss if loss is not None else outputs
+#
+#         return MultiHeadTokenClassifierOutput(
+#             loss=loss,
+#             loss_per_classifier=loss_per_classifier,
+#             logits_per_classifier=logits_per_classifier,
+#             hidden_states=outputs.hidden_states,
+#             attentions=outputs.attentions,
+#         )
+#
 
 class ContrastiveBertForSequenceClassification(BertPreTrainedModel):
     def __init__(self, config):
@@ -147,13 +149,19 @@ class ContrastiveBertForSequenceClassification(BertPreTrainedModel):
         )
         self.dropout = nn.Dropout(classifier_dropout)
         self.activation = nn.Tanh()
-        # self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
-        classifiers_layers = config.classifiers_layers
-        self.classifiers = {k: nn.Linear(config.hidden_size, config.num_labels, device='cuda') for k in classifiers_layers}
+        self.classifiers_layers = config.classifiers_layers
+
+        self.share_classifiers_weights = config.share_classifiers_weights
+        if self.share_classifiers_weights:
+            self.classifier = nn.Linear(config.hidden_size, config.num_labels)
+        else:
+            self.classifiers = nn.ModuleDict({str(k): nn.Linear(config.hidden_size, config.num_labels)
+                                              for k in self.classifiers_layers})
 
         # Initialize weights and apply final processing
         self.post_init()
+        self.i = 0
 
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -164,17 +172,17 @@ class ContrastiveBertForSequenceClassification(BertPreTrainedModel):
         expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
     )
     def forward(
-        self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+            self,
+            input_ids: Optional[torch.Tensor] = None,
+            attention_mask: Optional[torch.Tensor] = None,
+            token_type_ids: Optional[torch.Tensor] = None,
+            position_ids: Optional[torch.Tensor] = None,
+            head_mask: Optional[torch.Tensor] = None,
+            inputs_embeds: Optional[torch.Tensor] = None,
+            labels: Optional[torch.Tensor] = None,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], SequenceClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -196,13 +204,13 @@ class ContrastiveBertForSequenceClassification(BertPreTrainedModel):
             return_dict=return_dict,
         )
 
-        # pooled_output = outputs[1]
+        pooled_outputs = {k: self.dropout(self.activation(outputs.hidden_states[k][:, 0])) for k in
+                          self.classifiers_layers}
 
-        # pooled_output = self.dropout(pooled_output)
-        # logits = self.classifier(pooled_output)
-
-        pooled_outputs = {k: self.dropout(self.activation(outputs.hidden_states[k][:, 0])) for k in self.classifiers.keys()}
-        logits_per_classifier = {k: self.classifiers[k](pooled_outputs[k]) for k in self.classifiers.keys()}
+        if self.share_classifiers_weights:
+            logits_per_classifier = {k: self.classifier(pooled_outputs[k]) for k in self.classifiers_layers}
+        else:
+            logits_per_classifier = {k: self.classifiers[str(k)](pooled_outputs[k]) for k in self.classifiers_layers}
 
         loss = None
         loss_per_classifier = None
@@ -221,24 +229,24 @@ class ContrastiveBertForSequenceClassification(BertPreTrainedModel):
                     # loss = loss_fct(logits.squeeze(), labels.squeeze())
                     loss_per_classifier = {
                         k: loss_fct(logits_per_classifier[k].squeeze(), labels.squeeze())
-                        for k in self.classifiers.keys()}
+                        for k in self.classifiers_layers}
                 else:
                     # loss = loss_fct(logits, labels)
                     loss_per_classifier = {
                         k: loss_fct(logits_per_classifier[k], labels)
-                        for k in self.classifiers.keys()}
+                        for k in self.classifiers_layers}
             elif self.config.problem_type == "single_label_classification":
                 loss_fct = CrossEntropyLoss()
                 # loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
                 loss_per_classifier = {
                     k: loss_fct(logits_per_classifier[k].view(-1, self.num_labels), labels.view(-1))
-                    for k in self.classifiers.keys()}
+                    for k in self.classifiers_layers}
             elif self.config.problem_type == "multi_label_classification":
                 loss_fct = BCEWithLogitsLoss()
                 # loss = loss_fct(logits, labels)
                 loss_per_classifier = {
                     k: loss_fct(logits_per_classifier[k], labels)
-                    for k in self.classifiers.keys()}
+                    for k in self.classifiers_layers}
             else:
                 raise NotImplementedError(self.config.problem_type)
 

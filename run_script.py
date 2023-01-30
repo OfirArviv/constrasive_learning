@@ -182,7 +182,7 @@ def get_processed_dataset(dataset_key: str, split: str, tokenizer: PreTrainedTok
             "label_column": "label",
         }
         dataset_preprocess_func = preprocess_basic_classification_dataset
-        dataset = load_dataset("super_glue", name="cola", split=split)
+        dataset = load_dataset("glue", name="cola", split=split)
     elif dataset_key == "ax":
         dataset_specific_args = {
             "input_column_1": "premise",

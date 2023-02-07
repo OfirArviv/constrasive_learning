@@ -771,9 +771,6 @@ if __name__ == '__main__':
     # 2) More Tasks
     # 3) Analyze
 
-    plot_layer_comparison_heatmap_for_all_models()
-    exit()
-
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(help='sub-command help')
 

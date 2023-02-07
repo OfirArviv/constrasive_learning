@@ -1,9 +1,9 @@
 import os
+
 if os.path.exists('/dccstor'):
     os.environ['TRANSFORMERS_CACHE'] = '/dccstor/sum-datasets/users/ofir.arviv/transformers_cache'
     os.environ['HF_HOME'] = '/dccstor/sum-datasets/ofir.arviv/transformers_cache'
     os.environ['HF_DATASETS_CACHE'] = '/dccstor/sum-datasets/ofir.arviv/transformers_datasets_cache'
-
 
 import argparse
 import glob
@@ -30,6 +30,7 @@ from bert_modeling import ContrastiveBertConfig, \
     ContrastiveBertForSequenceClassification
 from trainer import train
 import pandas as pd
+
 
 # region Dataset processing
 def preprocess_basic_classification_example(examples,
@@ -308,7 +309,7 @@ def train_script(dataset_key: str, share_classifiers_weights: bool, output_dir: 
     use_cpu = False
     model.to("cpu" if use_cpu else "cuda")
 
-    train(model, tokenizer, train_dataset, dev_dataset, data_collator, output_dir, 5, no_cuda=use_cpu)
+    train(model, tokenizer, train_dataset, dev_dataset, data_collator, output_dir, 20, no_cuda=use_cpu)
 
 
 def predict_script(model_name_or_path: str, dataset_key: str, split: str = "validation",
@@ -674,6 +675,7 @@ def human_format(num):
         num /= 1000.0
     return '{}{}'.format('{:f}'.format(num).rstrip('0').rstrip('.'), ['', 'K', 'M', 'B', 'T'][magnitude])
 
+
 def plot_layer_comparison_heatmap(confidences_per_classifier: Dict[int, np.ndarray],
                                   labels: List[int],
                                   dataset_name: str):
@@ -716,7 +718,7 @@ def plot_layer_comparison_heatmap(confidences_per_classifier: Dict[int, np.ndarr
         for col, row in itertools.product(df.columns, df.index):
             both_correct_cnt = df_both_correct_cnt.loc[row, col]
             both_incorrect_cnt = df_both_incorrect_cnt.loc[row, col]
-            diff_cnt = both_incorrect_cnt-both_correct_cnt
+            diff_cnt = both_incorrect_cnt - both_correct_cnt
 
             diff_cnt_formatted = human_format(diff_cnt)
             both_correct_cnt_formatted = human_format(both_correct_cnt)
@@ -739,14 +741,13 @@ def plot_layer_comparison_heatmap_for_all_models():
             continue
         model_path = f'{model_dir}/data/'
         print(dataset_key)
-        logits_per_classifier, labels = predict_script(model_path, dataset_key, max_examples=1000000, split="validation")
+        logits_per_classifier, labels = predict_script(model_path, dataset_key, max_examples=1000000,
+                                                       split="validation")
         print(len(labels))
         confidence_per_classifier = {l: torch.nn.Softmax(dim=1)(logits_per_classifier[l]).cpu().numpy()
                                      for l in logits_per_classifier.keys()}
         calibrated_confidence_per_classifier = temperature_calibration(confidence_per_classifier, labels)
         plot_layer_comparison_heatmap(calibrated_confidence_per_classifier, labels, dataset_key)
-
-
 
 
 def experiment_script(model_name_or_path: str, dataset_key: str):

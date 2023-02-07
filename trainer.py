@@ -47,8 +47,8 @@ def train(model: PreTrainedModel,
     training_args = TrainingArguments(
         output_dir=output_dir,
         num_train_epochs=num_epochs,
-        per_device_train_batch_size=8,
-        per_device_eval_batch_size=8,
+        per_device_train_batch_size=4,
+        per_device_eval_batch_size=4,
         logging_strategy='epoch',
         evaluation_strategy='epoch',
         save_strategy='epoch',
@@ -60,7 +60,7 @@ def train(model: PreTrainedModel,
         no_cuda=no_cuda,
         # fp16=True,
         # gradient_accumulation_steps=4,
-        # eval_accumulation_steps=4
+        eval_accumulation_steps=20
     )
 
     trainer = Trainer(

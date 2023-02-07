@@ -297,8 +297,8 @@ def train_script(dataset_key: str, share_classifiers_weights: bool, output_dir: 
     model_name = "bert-base-cased"
     tokenizer = get_tokenizer(model_name)
 
-    train_dataset = get_processed_dataset(dataset_key, "train", tokenizer, 10000)
-    dev_dataset = get_processed_dataset(dataset_key, "validation", tokenizer, 2000)
+    train_dataset = get_processed_dataset(dataset_key, "train", tokenizer)
+    dev_dataset = get_processed_dataset(dataset_key, "validation", tokenizer)
 
     num_labels = len(set(train_dataset['labels']))
 
@@ -312,7 +312,7 @@ def train_script(dataset_key: str, share_classifiers_weights: bool, output_dir: 
 
 
 def predict_script(model_name_or_path: str, dataset_key: str, split: str = "validation",
-                   max_examples: int = 2000) -> Tuple[Dict[int, torch.Tensor], List[int]]:
+                   max_examples: Optional[int] = None) -> Tuple[Dict[int, torch.Tensor], List[int]]:
     use_cpu = True
     tokenizer = get_tokenizer(model_name_or_path)
 

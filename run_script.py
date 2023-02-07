@@ -14,6 +14,7 @@ import evaluate
 import numpy as np
 from datasets import load_dataset, Dataset
 from netcal.metrics.confidence import ECE
+from tqdm import tqdm
 from transformers import AutoTokenizer, DataCollatorWithPadding, \
     PreTrainedTokenizerBase, PreTrainedModel, set_seed
 import torch
@@ -322,7 +323,7 @@ def predict_script(model_name_or_path: str, dataset_key: str, split: str = "vali
                              for l in model.config.classifiers_layers}
     with torch.no_grad():
         batch_size = 8
-        for i in range(0, len(dev_dataset), batch_size):
+        for i in tqdm(range(0, len(dev_dataset), batch_size)):
             tokenized_inputs = data_collator(dev_dataset[i:min(i + batch_size, len(dev_dataset))]).to(
                 "cpu" if use_cpu else "cuda")
             batch_logits = model(**tokenized_inputs).logits
@@ -674,6 +675,11 @@ def plot_layer_comparison_heatmap(confidences_per_classifier: Dict[int, np.ndarr
     df = df.rename_axis("higher layer confidence", axis=1)
     df = df.fillna(0)
 
+    df_both_correct_cnt = df.copy(deep=True)
+    df_both_incorrect_cnt = df.copy(deep=True)
+
+    annotated_df = df.copy(deep=True)
+
     data_overconfidence, data_higher_layer_confidence = \
         get_layers_predictions_comparison(confidences_per_classifier, labels, 0, 0)
 
@@ -689,12 +695,20 @@ def plot_layer_comparison_heatmap(confidences_per_classifier: Dict[int, np.ndarr
                 lower_layer_overconfidence_bin = min(lower_layer_overconfidence_bin, 0.9)
                 if prediction_axis == "both correct":
                     df.loc[lower_layer_overconfidence_bin, higher_layer_confidence_bin] -= 1
+                    df_both_correct_cnt.loc[lower_layer_overconfidence_bin, higher_layer_confidence_bin] += 1
                 else:
                     df.loc[lower_layer_overconfidence_bin, higher_layer_confidence_bin] += 1
+                    df_both_incorrect_cnt.loc[lower_layer_overconfidence_bin, higher_layer_confidence_bin] += 1
+
+        for col, row in itertools.product(df.columns, df.index):
+            both_correct_cnt = df_both_correct_cnt.loc[row, col]
+            both_incorrect_cnt = df_both_incorrect_cnt.loc[row, col]
+            annt = f'{both_incorrect_cnt-both_correct_cnt} \n ({both_incorrect_cnt}, {both_correct_cnt})'
+            annotated_df.loc[row, col] = annt
 
         df = df.clip(upper=99, lower=-99)
-        ax = sns.heatmap(df, linewidth=0.5, center=0, annot=True, xticklabels=True, yticklabels=True,
-                         vmax=3, vmin=-3, ax=axs[i], cbar=False)
+        ax = sns.heatmap(df, annot=annotated_df, linewidth=0.5, center=0, xticklabels=True, yticklabels=True,
+                         vmax=3, vmin=-3, ax=axs[i], cbar=False, fmt = '')
         ax.set(title=f'{dataset_name} - Layers {layers_selection}: None Correct - Both Correct')
     plt.tight_layout()
     plt.show()
@@ -703,14 +717,12 @@ def plot_layer_comparison_heatmap(confidences_per_classifier: Dict[int, np.ndarr
 def plot_layer_comparison_heatmap_for_all_models():
     for model_dir in glob.glob("models/*"):
         dataset_key = os.path.basename(model_dir).split("_")[0]
-        if dataset_key == "boolq":
+        if dataset_key in ["boolq"]:
             continue
         model_path = f'{model_dir}/data/'
-
-        logits_per_classifier, labels = predict_script(model_path, dataset_key, max_examples=100000)
         print(dataset_key)
+        logits_per_classifier, labels = predict_script(model_path, dataset_key, max_examples=20000, split="validation")
         print(len(labels))
-        continue
         confidence_per_classifier = {l: torch.nn.Softmax(dim=1)(logits_per_classifier[l]).cpu().numpy()
                                      for l in logits_per_classifier.keys()}
         calibrated_confidence_per_classifier = temperature_calibration(confidence_per_classifier, labels)
@@ -772,6 +784,8 @@ if __name__ == '__main__':
     # 1) Use RoBERTa instead of BERT
     # 2) More Tasks
     # 3) Analyze
+    plot_layer_comparison_heatmap_for_all_models()
+    exit()
 
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(help='sub-command help')

@@ -722,12 +722,12 @@ def plot_layer_comparison_heatmap(confidences_per_classifier: Dict[int, np.ndarr
             diff_cnt_formatted = human_format(diff_cnt)
             both_correct_cnt_formatted = human_format(both_correct_cnt)
             both_incorrect_cnt_formatted = human_format(both_incorrect_cnt)
-            annt = f'{diff_cnt_formatted} \n ({both_incorrect_cnt_formatted}-{both_correct_cnt_formatted})'
+            annt = f'{diff_cnt_formatted} \n ({both_incorrect_cnt_formatted},\n{both_correct_cnt_formatted})'
             annotated_df.loc[row, col] = annt
 
         df = df.clip(upper=99, lower=-99)
         ax = sns.heatmap(df, annot=annotated_df, linewidth=0.5, center=0, xticklabels=True, yticklabels=True,
-                         vmax=3, vmin=-3, ax=axs[i], cbar=False, fmt = '')
+                         vmax=3, vmin=-3, ax=axs[i], cbar=False, fmt='')
         ax.set(title=f'{dataset_name} - Layers {layers_selection}: None Correct - Both Correct')
     plt.tight_layout()
     plt.show()

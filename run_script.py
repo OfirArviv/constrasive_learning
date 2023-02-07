@@ -30,6 +30,7 @@ import os
 if os.path.exists('/dccstor'):
     os.environ['TRANSFORMERS_CACHE'] = '/dccstor/sum-datasets/users/ofir.arviv/transformers_cache'
     os.environ['HF_HOME'] = '/dccstor/sum-datasets/ofir.arviv/transformers_cache'
+    os.environ['HF_DATASETS_CACHE'] = '/dccstor/sum-datasets/ofir.arviv/transformers_datasets_cache'
 
 
 # region Dataset processing

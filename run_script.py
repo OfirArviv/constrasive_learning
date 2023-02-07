@@ -661,6 +661,14 @@ def get_layers_predictions_comparison(confidences_per_classifier: Dict[int, np.n
     return data_overconfidence, data_higher_layer_confidence
 
 
+def human_format(num):
+    num = float('{:.3g}'.format(num))
+    magnitude = 0
+    while abs(num) >= 1000:
+        magnitude += 1
+        num /= 1000.0
+    return '{}{}'.format('{:f}'.format(num).rstrip('0').rstrip('.'), ['', 'K', 'M', 'B', 'T'][magnitude])
+
 def plot_layer_comparison_heatmap(confidences_per_classifier: Dict[int, np.ndarray],
                                   labels: List[int],
                                   dataset_name: str):
@@ -703,7 +711,12 @@ def plot_layer_comparison_heatmap(confidences_per_classifier: Dict[int, np.ndarr
         for col, row in itertools.product(df.columns, df.index):
             both_correct_cnt = df_both_correct_cnt.loc[row, col]
             both_incorrect_cnt = df_both_incorrect_cnt.loc[row, col]
-            annt = f'{both_incorrect_cnt-both_correct_cnt} \n ({both_incorrect_cnt}, {both_correct_cnt})'
+            diff_cnt = both_incorrect_cnt-both_correct_cnt
+
+            diff_cnt_formatted = human_format(diff_cnt)
+            both_correct_cnt_formatted = human_format(both_correct_cnt)
+            both_incorrect_cnt_formatted = human_format(both_incorrect_cnt)
+            annt = f'{diff_cnt_formatted} \n ({both_incorrect_cnt_formatted}-{both_correct_cnt_formatted})'
             annotated_df.loc[row, col] = annt
 
         df = df.clip(upper=99, lower=-99)
@@ -721,7 +734,7 @@ def plot_layer_comparison_heatmap_for_all_models():
             continue
         model_path = f'{model_dir}/data/'
         print(dataset_key)
-        logits_per_classifier, labels = predict_script(model_path, dataset_key, max_examples=20000, split="validation")
+        logits_per_classifier, labels = predict_script(model_path, dataset_key, max_examples=1000000, split="validation")
         print(len(labels))
         confidence_per_classifier = {l: torch.nn.Softmax(dim=1)(logits_per_classifier[l]).cpu().numpy()
                                      for l in logits_per_classifier.keys()}
@@ -784,8 +797,8 @@ if __name__ == '__main__':
     # 1) Use RoBERTa instead of BERT
     # 2) More Tasks
     # 3) Analyze
-    plot_layer_comparison_heatmap_for_all_models()
-    exit()
+    # plot_layer_comparison_heatmap_for_all_models()
+    # exit()
 
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(help='sub-command help')

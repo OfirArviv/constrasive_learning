@@ -4,4 +4,5 @@ datasets
 evaluate
 matplotlib
 netcal
+seaborn
 git+ssh://git@github.ibm.com/CVAR-DL-DET/pyutils.git

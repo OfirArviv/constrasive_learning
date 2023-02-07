@@ -213,7 +213,7 @@ def get_processed_dataset(dataset_key: str, split: str, tokenizer: PreTrainedTok
         }
         dataset_preprocess_func = preprocess_pair_classification_dataset
         dataset = load_dataset("glue", name="qqp", split=split)
-    elif dataset_key in ["mnli_matched", "mnli_mismatched"]:
+    elif dataset_key in ["mnli", "mnli_matched", "mnli_mismatched"]:
         dataset_specific_args = {
             "input_column_1": "premise",
             "input_column_2": "hypothesis",

@@ -1,8 +1,12 @@
 import argparse
+import glob
 import itertools
 import json
+import os
 from statistics import median
 from typing import Tuple, List, Dict, Optional
+
+import seaborn as sns
 import matplotlib.pyplot as plt
 from netcal.presentation import ReliabilityDiagram
 from netcal.scaling import TemperatureScaling
@@ -13,10 +17,12 @@ from netcal.metrics.confidence import ECE
 from transformers import AutoTokenizer, DataCollatorWithPadding, \
     PreTrainedTokenizerBase, PreTrainedModel, set_seed
 import torch
+import math
 
 from bert_modeling import ContrastiveBertConfig, \
     ContrastiveBertForSequenceClassification
 from trainer import train
+import pandas as pd
 
 
 # region Dataset processing
@@ -207,6 +213,15 @@ def get_processed_dataset(dataset_key: str, split: str, tokenizer: PreTrainedTok
         }
         dataset_preprocess_func = preprocess_pair_classification_dataset
         dataset = load_dataset("glue", name="qqp", split=split)
+    elif dataset_key in ["mnli_matched", "mnli_mismatched"]:
+        dataset_specific_args = {
+            "input_column_1": "premise",
+            "input_column_2": "hypothesis",
+            "label_column": "label",
+        }
+        dataset_preprocess_func = preprocess_pair_classification_dataset
+        dataset = load_dataset("glue", name=dataset_key, split=split)
+
     else:
         raise NotImplementedError(dataset_key)
 
@@ -231,7 +246,7 @@ def get_score(labels: List[int], prediction_per_classifier: Dict[str, List[int]]
 
     fscore = evaluate.load("f1")
     f1_per_classifier = {f'{l}_f1': fscore.compute(references=labels, predictions=prediction_per_classifier[l],
-                                                   average=fscore_average)
+                                                   average=fscore_average)['f1']
                          for l in prediction_per_classifier}
 
     acc_score = evaluate.load("accuracy")
@@ -239,7 +254,7 @@ def get_score(labels: List[int], prediction_per_classifier: Dict[str, List[int]]
                           for l in prediction_per_classifier}
 
     res_dict = f1_per_classifier
-    res_dict.update(acc_per_classifier)
+    # res_dict.update(acc_per_classifier)
 
     return res_dict
 
@@ -257,7 +272,8 @@ def get_model(model_name_or_path: str,
         config.classifiers_layers = [4, 8, 12]
         config.share_classifiers_weights = share_classifiers_weights
 
-    # config.num_labels = num_labels
+    # TODO: For some reason this config isnt saved
+    config.num_labels = num_labels
 
     model = ContrastiveBertForSequenceClassification.from_pretrained(model_name_or_path, config=config)
 
@@ -287,20 +303,26 @@ def train_script(dataset_key: str, share_classifiers_weights: bool, output_dir: 
     train(model, tokenizer, train_dataset, dev_dataset, data_collator, output_dir, 5, no_cuda=use_cpu)
 
 
-def predict_script(model_name_or_path: str, dataset_key: str) -> Tuple[Dict[int, torch.Tensor], List[int]]:
+def predict_script(model_name_or_path: str, dataset_key: str, split: str = "validation",
+                   max_examples: int = 2000) -> Tuple[Dict[int, torch.Tensor], List[int]]:
+    use_cpu = True
     tokenizer = get_tokenizer(model_name_or_path)
-    model = get_model(model_name_or_path)
-    model.cuda()
 
-    dev_dataset = get_processed_dataset(dataset_key, "validation", tokenizer, 2000)
+    dev_dataset = get_processed_dataset(dataset_key, split, tokenizer, max_examples)
+    num_labels = len(set(dev_dataset['labels']))
+
+    model = get_model(model_name_or_path, num_labels)
+    model.to("cpu" if use_cpu else "cuda")
+
     data_collator = DataCollatorWithPadding(tokenizer)
 
-    logits_per_classifier = {l: torch.empty(0, model.config.num_labels, device="cuda")
+    logits_per_classifier = {l: torch.empty(0, model.config.num_labels, device="cpu" if use_cpu else "cuda")
                              for l in model.config.classifiers_layers}
     with torch.no_grad():
         batch_size = 8
         for i in range(0, len(dev_dataset), batch_size):
-            tokenized_inputs = data_collator(dev_dataset[i:min(i + batch_size, len(dev_dataset))]).to('cuda')
+            tokenized_inputs = data_collator(dev_dataset[i:min(i + batch_size, len(dev_dataset))]).to(
+                "cpu" if use_cpu else "cuda")
             batch_logits = model(**tokenized_inputs).logits
             for layer, l_logits in batch_logits.items():
                 logits_per_classifier[layer] = torch.concat([logits_per_classifier[layer], l_logits])
@@ -375,10 +397,13 @@ def temperature_calibration(confidences_per_classifier: Dict[int, np.ndarray],
 
 # region Contrastive Utils
 
+# TODO: We check the case where both layers agree.
+#  There are other cases, for example, where the lower layer thinks differently from the higher layer,
+#  but we will check it only in the future.
 def get_lower_layer_overconfidence(higher_layer_confidences: np.ndarray, lower_layer_confidences: np.ndarray):
-    lower_layer_prob_argmax = np.argmax(lower_layer_confidences)
-    lower_layer_prob = lower_layer_confidences[lower_layer_prob_argmax]
-    higher_layer_prob = higher_layer_confidences[lower_layer_prob_argmax]
+    higher_layer_prob_argmax = np.argmax(higher_layer_confidences)
+    lower_layer_prob = lower_layer_confidences[higher_layer_prob_argmax]
+    higher_layer_prob = higher_layer_confidences[higher_layer_prob_argmax]
 
     if lower_layer_prob > higher_layer_prob:
         lower_layer_overconfidence = ((lower_layer_prob / higher_layer_prob) - 1)
@@ -519,6 +544,179 @@ def experiment_3(confidences_per_classifier: Dict[int, np.ndarray], labels: List
     print("a")
 
 
+def print_contrastive_results_comparison(model_name_or_path: str, dataset_key: str):
+    logits_per_classifier, labels = predict_script(model_name_or_path, dataset_key)
+
+    prediction_per_classifier = {l: torch.argmax(logits_per_classifier[l], dim=1).tolist()
+                                 for l in logits_per_classifier}
+
+    model_scores = get_score(labels, prediction_per_classifier)
+
+    confidence_per_classifier = {l: torch.nn.Softmax(dim=1)(logits_per_classifier[l]).cpu().numpy()
+                                 for l in logits_per_classifier.keys()}
+
+    calibrated_confidence_per_classifier = temperature_calibration(confidence_per_classifier, labels)
+
+    contrastive_predictions_per_classifier = get_contrastive_predictions(calibrated_confidence_per_classifier)
+    contrastive_model_scores = get_score(labels, contrastive_predictions_per_classifier)
+
+    print("----------------------------")
+    print(dataset_key)
+    print("----------------------------")
+    print(json.dumps(model_scores, indent=4))
+    print(json.dumps(contrastive_model_scores, indent=4))
+
+
+def plot_overconfidence_histogram(confidences_per_classifier: Dict[int, np.ndarray], labels: List[int]):
+    for layer_1, layer_2 in itertools.combinations(confidences_per_classifier.keys(), 2):
+        higher_layer = layer_1 if layer_1 > layer_2 else layer_2
+        lower_layer = layer_1 if higher_layer == layer_2 else layer_2
+
+        higher_layer_confidences = confidences_per_classifier[higher_layer]
+        lower_layer_confidences = confidences_per_classifier[lower_layer]
+        overconfidences_list = []
+        for i in range(len(higher_layer_confidences)):
+            higher_layer_confidence = higher_layer_confidences[i]
+            lower_layer_confidence = lower_layer_confidences[i]
+
+            higher_layer_prediction = np.argmax(higher_layer_confidence)
+            lower_layer_prediction = np.argmax(lower_layer_confidence)
+            label = labels[i]
+
+            if higher_layer_prediction == label or lower_layer_prediction == label:
+                continue
+
+            lower_layer_overconfidence = get_lower_layer_overconfidence(higher_layer_confidence,
+                                                                        lower_layer_confidence)
+            overconfidences_list.append(lower_layer_overconfidence)
+
+        plt.hist(overconfidences_list)
+        plt.title(f'{layer_1}-{layer_2}-both wrong')
+        plt.show()
+    return None
+
+
+def get_layers_predictions_comparison(confidences_per_classifier: Dict[int, np.ndarray],
+                                      labels: List[int],
+                                      overconfidence_threshold: float,
+                                      higher_layer_confidence_threshold: float) -> Tuple[Dict, Dict]:
+    data_overconfidence = dict()
+    data_higher_layer_confidence = dict()
+    for layer_1, layer_2 in itertools.combinations(confidences_per_classifier.keys(), 2):
+        higher_layer = layer_1 if layer_1 > layer_2 else layer_2
+        lower_layer = layer_1 if higher_layer == layer_2 else layer_2
+
+        data_overconfidence[f'{higher_layer}_{lower_layer}'] = {
+            f'{higher_layer} correct': list(),
+            f'{lower_layer} correct': list(),
+            f'both correct': list(),
+            f'none correct': list()
+        }
+
+        data_higher_layer_confidence[f'{higher_layer}_{lower_layer}'] = {
+            f'{higher_layer} correct': list(),
+            f'{lower_layer} correct': list(),
+            f'both correct': list(),
+            f'none correct': list()
+        }
+
+        curr_overconfidence_data = data_overconfidence[f'{higher_layer}_{lower_layer}']
+        curr_higher_layer_confidence_data = data_higher_layer_confidence[f'{higher_layer}_{lower_layer}']
+
+        higher_layer_confidences = confidences_per_classifier[higher_layer]
+        lower_layer_confidences = confidences_per_classifier[lower_layer]
+        overconfidences_list = []
+        for i in range(len(higher_layer_confidences)):
+            higher_layer_confidence = higher_layer_confidences[i]
+            lower_layer_confidence = lower_layer_confidences[i]
+
+            lower_layer_overconfidence = get_lower_layer_overconfidence(higher_layer_confidence,
+                                                                        lower_layer_confidence)
+
+            overconfidences_list.append(lower_layer_overconfidence)
+            higher_layer_prediction = np.argmax(higher_layer_confidence)
+            higher_layer_prediction_confidence = np.max(higher_layer_confidence)
+            lower_layer_prediction = np.argmax(lower_layer_confidence)
+            if lower_layer_overconfidence > overconfidence_threshold and higher_layer_prediction_confidence > higher_layer_confidence_threshold:
+                label = labels[i]
+
+                if label == higher_layer_prediction and label == lower_layer_prediction:
+                    curr_overconfidence_data['both correct'].append(lower_layer_overconfidence)
+                    curr_higher_layer_confidence_data['both correct'].append(higher_layer_prediction_confidence)
+                elif label == higher_layer_prediction:
+                    curr_overconfidence_data[f'{higher_layer} correct'].append(lower_layer_overconfidence)
+                    curr_higher_layer_confidence_data[f'{higher_layer} correct'].append(
+                        higher_layer_prediction_confidence)
+                elif label == lower_layer_prediction:
+                    curr_overconfidence_data[f'{lower_layer} correct'].append(lower_layer_overconfidence)
+                    curr_higher_layer_confidence_data[f'{lower_layer} correct'].append(
+                        higher_layer_prediction_confidence)
+                else:
+                    curr_overconfidence_data[f'none correct'].append(lower_layer_overconfidence)
+                    curr_higher_layer_confidence_data[f'none correct'].append(higher_layer_prediction_confidence)
+
+    return data_overconfidence, data_higher_layer_confidence
+
+
+def plot_layer_comparison_heatmap(confidences_per_classifier: Dict[int, np.ndarray],
+                                  labels: List[int],
+                                  dataset_name: str):
+    y_bins = list(np.round(np.linspace(0, 0.9, 10), 2))
+    x_bins = list(np.round(np.linspace(0, 0.9, 10), 2))
+
+    # X-axis - overconfidence
+    # Y-axis - upper layer confidence
+    # Z-axis - (None correct - both correct)
+    df = pd.DataFrame(columns=y_bins, index=x_bins)
+    df = df.rename_axis("overconfidence", axis=0)
+    df = df.rename_axis("higher layer confidence", axis=1)
+    df = df.fillna(0)
+
+    data_overconfidence, data_higher_layer_confidence = \
+        get_layers_predictions_comparison(confidences_per_classifier, labels, 0, 0)
+
+    fig, axs = plt.subplots(ncols=3, figsize=(21, 7))
+    for i, layers_selection in enumerate(["12_8", "12_4", "8_4"]):
+        for prediction_axis in ["both correct", "none correct"]:
+            selected_overconfidence_data = data_overconfidence[layers_selection][prediction_axis]
+            selected_higher_layer_confidence_data = data_higher_layer_confidence[layers_selection][prediction_axis]
+            for higher_layer_confidence, lower_layer_overconfidence in zip(selected_higher_layer_confidence_data,
+                                                                           selected_overconfidence_data):
+                higher_layer_confidence_bin = int(math.floor(higher_layer_confidence * 100) / 10) * 10 / 100.0
+                lower_layer_overconfidence_bin = int(math.floor(lower_layer_overconfidence * 100) / 10) * 10 / 100.0
+                lower_layer_overconfidence_bin = min(lower_layer_overconfidence_bin, 0.9)
+                if prediction_axis == "both correct":
+                    df.loc[lower_layer_overconfidence_bin, higher_layer_confidence_bin] -= 1
+                else:
+                    df.loc[lower_layer_overconfidence_bin, higher_layer_confidence_bin] += 1
+
+        df = df.clip(upper=99, lower=-99)
+        ax = sns.heatmap(df, linewidth=0.5, center=0, annot=True, xticklabels=True, yticklabels=True,
+                         vmax=3, vmin=-3, ax=axs[i], cbar=False)
+        ax.set(title=f'{dataset_name} - Layers {layers_selection}: None Correct - Both Correct')
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_layer_comparison_heatmap_for_all_models():
+    for model_dir in glob.glob("models/*"):
+        dataset_key = os.path.basename(model_dir).split("_")[0]
+        if dataset_key == "boolq":
+            continue
+        model_path = f'{model_dir}/data/'
+
+        logits_per_classifier, labels = predict_script(model_path, dataset_key, max_examples=100000)
+        print(dataset_key)
+        print(len(labels))
+        continue
+        confidence_per_classifier = {l: torch.nn.Softmax(dim=1)(logits_per_classifier[l]).cpu().numpy()
+                                     for l in logits_per_classifier.keys()}
+        calibrated_confidence_per_classifier = temperature_calibration(confidence_per_classifier, labels)
+        plot_layer_comparison_heatmap(calibrated_confidence_per_classifier, labels, dataset_key)
+
+
+
+
 def experiment_script(model_name_or_path: str, dataset_key: str):
     logits_per_classifier, labels = predict_script(model_name_or_path, dataset_key)
 
@@ -536,6 +734,11 @@ def experiment_script(model_name_or_path: str, dataset_key: str):
 
     calibrated_confidence_per_classifier = temperature_calibration(confidence_per_classifier, labels)
 
+    # plot_overconfidence_histogram(calibrated_confidence_per_classifier, labels)
+    get_data_for_layer_comparison_plot(calibrated_confidence_per_classifier, labels)
+    a, b = get_layers_predictions_comparison(calibrated_confidence_per_classifier, labels, 0.2)
+    plot_layers_comparison_histo(a, b)
+
     # calibrated_scores = get_calibration_scores_per_layer(calibrated_confidence_per_classifier, labels)
     # print(json.dumps(calibrated_scores, indent=4))
 
@@ -552,11 +755,24 @@ def experiment_script(model_name_or_path: str, dataset_key: str):
     print("end")
 
 
+def get_contrastive_score_diff_for_all_models():
+    for model_dir in glob.glob("models/*"):
+        dataset_key = os.path.basename(model_dir).split("_")[0]
+        if dataset_key == "boolq":
+            continue
+        model_path = f'{model_dir}/data/'
+
+        print_contrastive_results_comparison(model_path, dataset_key)
+
+
 if __name__ == '__main__':
     # TODO:
     # 1) Use RoBERTa instead of BERT
     # 2) More Tasks
     # 3) Analyze
+
+    plot_layer_comparison_heatmap_for_all_models()
+    exit()
 
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(help='sub-command help')
@@ -577,9 +793,9 @@ if __name__ == '__main__':
     parser_experiment.add_argument('-d', '--dataset-key', required=True, type=str)
     # endregion
 
-    args = parser.parse_args()
-
     set_seed(42)
+
+    args = parser.parse_args()
 
     if args.which == "train":
         train_script(args.dataset_key, args.share_classifiers_weights, args.output_dir)

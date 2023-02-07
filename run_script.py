@@ -25,6 +25,12 @@ from bert_modeling import ContrastiveBertConfig, \
 from trainer import train
 import pandas as pd
 
+import os
+
+if os.path.exists('/dccstor'):
+    os.environ['TRANSFORMERS_CACHE'] = '/dccstor/sum-datasets/users/ofir.arviv/transformers_cache'
+    os.environ['HF_HOME'] = '/dccstor/sum-datasets/ofir.arviv/transformers_cache'
+
 
 # region Dataset processing
 def preprocess_basic_classification_example(examples,

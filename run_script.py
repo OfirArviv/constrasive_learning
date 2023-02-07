@@ -220,7 +220,7 @@ def get_processed_dataset(dataset_key: str, split: str, tokenizer: PreTrainedTok
             "label_column": "label",
         }
         dataset_preprocess_func = preprocess_pair_classification_dataset
-        if dataset_key == "mnli":
+        if dataset_key == "mnli" and split != "train":
             split = f'{split}_matched'
         dataset = load_dataset("glue", name=dataset_key, split=split)
 

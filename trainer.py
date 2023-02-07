@@ -58,9 +58,9 @@ def train(model: PreTrainedModel,
         load_best_model_at_end=True,
         metric_for_best_model="layer_12_f1",
         no_cuda=no_cuda,
-        fp16=True,
-        gradient_accumulation_steps=4,
-        eval_accumulation_steps=4
+        # fp16=True,
+        # gradient_accumulation_steps=4,
+        # eval_accumulation_steps=4
     )
 
     trainer = Trainer(

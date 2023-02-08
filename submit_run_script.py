@@ -19,7 +19,7 @@ from pathlib import Path
 MACHINE_TYPE = 'x86'
 NUM_CORES = 16
 NUM_GPUS = 1
-MEMORY = '124g'  # amount of memory we will request for the job
+MEMORY = '164g'  # amount of memory we will request for the job
 GPU_TYPE = 'a100_80gb'  # currently we can't run on a100, see README.md
 
 if __name__ == '__main__':

@@ -44,7 +44,7 @@ if __name__ == '__main__':
         os.makedirs(log_dir, exist_ok=True)
         print(f'Logging to {log_dir}')
 
-        experiment_name = f'{args.experiment_name}'
+        experiment_name = f'{args.experiment_name}_{dataset}'
         i = 0
         while os.path.isfile(os.path.join(log_dir, experiment_name + '_out.txt')):
             experiment_name = f'{args.experiment_name}_{i}'

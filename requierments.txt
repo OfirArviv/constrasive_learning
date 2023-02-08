@@ -5,4 +5,5 @@ evaluate
 matplotlib
 netcal
 seaborn
+json-numpy
 git+ssh://git@github.ibm.com/CVAR-DL-DET/pyutils.git

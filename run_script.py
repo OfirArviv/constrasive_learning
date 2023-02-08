@@ -894,6 +894,6 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     if args.which == "train":
-        train_script(args.dataset_key, args.share_classifiers_weights, args.output_dir)
+        train_script(args.dataset_key, args.share_classifiers_weights, args.output_dir, 10000)
     if args.which == "experiment":
         experiment_script(args.model_name_or_path, args.dataset_key)

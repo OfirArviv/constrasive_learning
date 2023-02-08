@@ -83,7 +83,7 @@ if __name__ == '__main__':
                                               duration=args.duration,
                                               num_cores=NUM_CORES,
                                               num_gpus=NUM_GPUS,
-                                              name=args.experiment_name,
+                                              name=experiment_name,
                                               mem=MEMORY,
                                               gpu_type=GPU_TYPE,
                                               out_file=out_fname,

@@ -879,6 +879,7 @@ if __name__ == '__main__':
     parser_train.add_argument('-d', '--dataset-key', required=True, type=str)
     parser_train.add_argument('-o', '--output-dir', required=True, type=str)
     parser_train.add_argument('-s', '--share-classifiers-weights', action='store_true')
+    parser_train.add_argument('-m', '--max-train-examples', type=int, required=False, default=None)
 
     # endregion
 
@@ -894,6 +895,6 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     if args.which == "train":
-        train_script(args.dataset_key, args.share_classifiers_weights, args.output_dir, 10000)
+        train_script(args.dataset_key, args.share_classifiers_weights, args.output_dir, args.max_train_examples)
     if args.which == "experiment":
         experiment_script(args.model_name_or_path, args.dataset_key)

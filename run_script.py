@@ -251,6 +251,13 @@ def get_processed_dataset(dataset_key: str, split: str, tokenizer: PreTrainedTok
             split = "test"
         dataset_preprocess_func = preprocess_basic_classification_dataset
         dataset = load_dataset(dataset_key, split=split)
+    elif dataset_key == "clinc_oos":
+        dataset_specific_args = {
+            "source_column": "text",
+            "label_column": "intent",
+        }
+        dataset_preprocess_func = preprocess_basic_classification_dataset
+        dataset = load_dataset(dataset_key, name='plus', split=split)
     else:
         raise NotImplementedError(dataset_key)
 

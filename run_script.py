@@ -168,6 +168,51 @@ def preprocess_qa_classification_dataset(dataset: Dataset,
                        load_from_cache_file=False)
 
 
+def preprocess_multi_label_classification_example(examples,
+                                                  tokenizer: PreTrainedTokenizerBase,
+                                                  input_column: str,
+                                                  label_column: str,
+                                                  max_source_length: int,
+                                                  num_labels: int):
+    # remove pairs where at least one record is None
+    inputs, labels = [], []
+    for i in range(len(examples[input_column])):
+        if examples[input_column][i] is not None and examples[label_column][i] is not None:
+            inputs.append(examples[input_column][i])
+            labels.append(examples[label_column][i])
+
+    model_inputs = tokenizer(inputs, max_length=max_source_length, truncation=True)
+
+    # Setup the tokenizer for targets
+    # with tokenizer.as_target_tokenizer():
+    #   labels = tokenizer(labels, max_length=max_target_length, truncation=False)
+    batch_size = len(labels)
+    formatted_labels = [[0]*num_labels]*batch_size
+    for i, labels_idxs in enumerate(labels):
+        for idx in labels_idxs:
+            formatted_labels[i][idx] = 1
+    model_inputs["labels"] = formatted_labels
+    return model_inputs
+
+
+def preprocess_multi_label_classification_dataset(dataset: Dataset,
+                                                  tokenizer: PreTrainedTokenizerBase,
+                                                  source_column: str,
+                                                  label_column: str,
+                                                  num_labels: int
+                                                  ) -> Dataset:
+    max_seq_length = 512
+    return dataset.map(lambda examples: preprocess_multi_label_classification_example(examples,
+                                                                                      tokenizer,
+                                                                                      source_column,
+                                                                                      label_column,
+                                                                                      max_seq_length,
+                                                                                      num_labels),
+                       remove_columns=dataset.column_names,
+                       batched=True,
+                       load_from_cache_file=False)
+
+
 def get_processed_dataset(dataset_key: str, split: str, tokenizer: PreTrainedTokenizerBase,
                           size: Optional[int] = None) -> Dataset:
     if dataset_key == "sst2":
@@ -258,6 +303,14 @@ def get_processed_dataset(dataset_key: str, split: str, tokenizer: PreTrainedTok
         }
         dataset_preprocess_func = preprocess_basic_classification_dataset
         dataset = load_dataset(dataset_key, name='plus', split=split)
+    elif dataset_key == "go_emotions":
+        dataset_specific_args = {
+            "source_column": "text",
+            "label_column": "labels",
+            "num_labels": 28
+        }
+        dataset_preprocess_func = preprocess_multi_label_classification_dataset
+        dataset = load_dataset(dataset_key, name='simplified', split=split)
     else:
         raise NotImplementedError(dataset_key)
 
@@ -287,8 +340,9 @@ def get_score(labels: List[int], prediction_per_classifier: Dict[str, List[int]]
                          for l in prediction_per_classifier}
 
     acc_score = evaluate.load("accuracy")
-    acc_per_classifier = {f'{l}_acc': acc_score.compute(references=labels, predictions=prediction_per_classifier[l])['accuracy']
-                          for l in prediction_per_classifier}
+    acc_per_classifier = {
+        f'{l}_acc': acc_score.compute(references=labels, predictions=prediction_per_classifier[l])['accuracy']
+        for l in prediction_per_classifier}
 
     res_dict = f1_per_classifier
     res_dict.update(acc_per_classifier)
@@ -308,6 +362,8 @@ def get_model(model_name_or_path: str,
         config.num_labels = num_labels
         config.classifiers_layers = [4, 8, 12]
         config.share_classifiers_weights = share_classifiers_weights
+
+    config.problem_type = "multi_label_classification"
 
     # TODO: For some reason this config isnt saved
     config.num_labels = num_labels
@@ -329,12 +385,18 @@ def train_script(dataset_key: str, share_classifiers_weights: bool, output_dir: 
     train_dataset = get_processed_dataset(dataset_key, "train", tokenizer, train_max_size)
     dev_dataset = get_processed_dataset(dataset_key, "validation", tokenizer)
 
-    num_labels = len(set(train_dataset['labels']))
+    labels = train_dataset['labels']
+    sample_label = labels[0]
+    if isinstance(sample_label, list):
+        num_labels = len(sample_label)
+    else:
+        label_set = set(train_dataset['labels'])
+        num_labels = len(label_set)
 
     model = get_model(model_name, num_labels, share_classifiers_weights)
     data_collator = DataCollatorWithPadding(tokenizer)
 
-    use_cpu = False
+    use_cpu = True
     model.to("cpu" if use_cpu else "cuda")
 
     train(model, tokenizer, train_dataset, dev_dataset, data_collator, output_dir, 20, no_cuda=use_cpu)
@@ -657,8 +719,9 @@ def get_native_oracle_contrastive_score(confidences_per_classifier: Dict[int, np
             higher_layer_confidence = data_higher_layer_confidence[l]['all'][i]
             if overconfidence == 0:
                 continue
-            if (thresh['optimal_min_row_idx'] <= overconfidence < thresh['optimal_max_row_idx']) and (thresh['optimal_min_col_idx'] <= higher_layer_confidence < thresh['optimal_max_col_idx']):
-                cnt +=1
+            if (thresh['optimal_min_row_idx'] <= overconfidence < thresh['optimal_max_row_idx']) and (
+                    thresh['optimal_min_col_idx'] <= higher_layer_confidence < thresh['optimal_max_col_idx']):
+                cnt += 1
                 optimal_prediction[i] = labels[i]
         optimal_prediction_per_classifier[l] = optimal_prediction
 

@@ -245,7 +245,7 @@ class ContrastiveBertForSequenceClassification(BertPreTrainedModel):
                 loss_fct = BCEWithLogitsLoss()
                 # loss = loss_fct(logits, labels)
                 loss_per_classifier = {
-                    k: loss_fct(logits_per_classifier[k], labels)
+                    k: loss_fct(logits_per_classifier[k], labels.float())
                     for k in self.classifiers_layers}
             else:
                 raise NotImplementedError(self.config.problem_type)

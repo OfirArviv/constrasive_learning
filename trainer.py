@@ -1,6 +1,8 @@
 from typing import Optional, Callable
 import numpy as np
 import evaluate
+import sklearn
+import torch
 from datasets import Dataset
 from transformers import TrainingArguments, Trainer, PreTrainedModel, DataCollator, PreTrainedTokenizerBase, \
     EvalPrediction, EarlyStoppingCallback
@@ -20,12 +22,19 @@ def get_fscore_eval_func(num_labels: int) -> Callable:
         fscore = evaluate.load("f1")
 
         res = dict()
+        sig = torch.nn.Sigmoid()
         for layer in preds.keys():
             logits = preds[layer]
-            layer_preds = np.argmax(logits, axis=1)
-            layer_res = fscore.compute(references=labels, predictions=layer_preds, average=fscore_average)
-            for metric, val in layer_res.items():
-                res[f'layer_{layer}_{metric}'] = val
+            if logits.shape[1] > 1:
+                logits = torch.tensor(logits)
+                layer_preds = torch.round(sig(logits))
+                layer_res = sklearn.metrics.f1_score(labels, layer_preds, average="weighted")
+                res[f'layer_{layer}_f1'] = layer_res
+            else:
+                layer_preds = np.argmax(logits, axis=1)
+                layer_res = fscore.compute(references=labels, predictions=layer_preds, average=fscore_average)
+                for metric, val in layer_res.items():
+                    res[f'layer_{layer}_{metric}'] = val
 
         return res
 

@@ -187,7 +187,7 @@ def preprocess_multi_label_classification_example(examples,
     # with tokenizer.as_target_tokenizer():
     #   labels = tokenizer(labels, max_length=max_target_length, truncation=False)
     batch_size = len(labels)
-    formatted_labels = [[0]*num_labels]*batch_size
+    formatted_labels =np.zeros([batch_size, num_labels])
     for i, labels_idxs in enumerate(labels):
         for idx in labels_idxs:
             formatted_labels[i][idx] = 1

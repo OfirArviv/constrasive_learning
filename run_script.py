@@ -248,12 +248,14 @@ def get_processed_dataset(dataset_key: str, split: str, tokenizer: PreTrainedTok
             "label_column": "label",
         }
         dataset_preprocess_func = preprocess_basic_classification_dataset
+        dataset = load_dataset(dataset_key, split=split)
     else:
         raise NotImplementedError(dataset_key)
 
+    dataset = dataset.shuffle(seed=42)
     if size is not None:
         size = min(size, len(dataset))
-        dataset = dataset.shuffle(seed=42).select(range(size))
+        dataset = dataset.select(range(size))
     dataset = dataset_preprocess_func(dataset, tokenizer, **dataset_specific_args)
 
     return dataset

@@ -360,13 +360,13 @@ def get_model(model_name_or_path: str,
                                                       'param share_classifiers_weights and thus it needs to be provided'
         assert num_labels is not None
         config.num_labels = num_labels
-        config.classifiers_layers = [4, 8, 12]
+        config.classifiers_layers = [1, 2, 4, 8, 12]
         config.share_classifiers_weights = share_classifiers_weights
 
-    config.problem_type = "multi_label_classification"
 
     # TODO: For some reason this config isnt saved
     config.num_labels = num_labels
+    config.problem_type = None
 
     model = ContrastiveBertForSequenceClassification.from_pretrained(model_name_or_path, config=config)
 

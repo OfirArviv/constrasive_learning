@@ -247,6 +247,8 @@ def get_processed_dataset(dataset_key: str, split: str, tokenizer: PreTrainedTok
             "source_column": "text",
             "label_column": "label",
         }
+        if split == "validation":
+            split = "test"
         dataset_preprocess_func = preprocess_basic_classification_dataset
         dataset = load_dataset(dataset_key, split=split)
     else:

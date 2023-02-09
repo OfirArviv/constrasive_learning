@@ -25,7 +25,7 @@ def get_fscore_eval_func(num_labels: int) -> Callable:
         sig = torch.nn.Sigmoid()
         for layer in preds.keys():
             logits = preds[layer]
-            if logits.shape[1] > 1:
+            if len(labels.shape) > 1:
                 logits = torch.tensor(logits)
                 layer_preds = torch.round(sig(logits))
                 layer_res = sklearn.metrics.f1_score(labels, layer_preds, average="weighted")

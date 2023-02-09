@@ -218,7 +218,7 @@ class ContrastiveBertForSequenceClassification(BertPreTrainedModel):
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
-                elif self.num_labels > 1 and labels.shape[1] == 1: #and (labels.dtype == torch.long or labels.dtype == torch.int):
+                elif self.num_labels > 1 and len(labels.shape) == 1: #and (labels.dtype == torch.long or labels.dtype == torch.int):
                     self.config.problem_type = "single_label_classification"
                 else:
                     torch._assert(labels.shape[1] == self.num_labels, "labels vector dim does not match num of labels")

@@ -472,7 +472,12 @@ def predict_script(model_name_or_path: str, dataset_key: str, output_dir: str,  
 
     dev_dataset = get_processed_dataset(dataset_key, split, tokenizer, max_examples)
     labels = dev_dataset['labels']
-    num_labels = len(set(labels))
+    sample_label = labels[0]
+    if isinstance(sample_label, list):
+        num_labels = len(sample_label)
+    else:
+        label_set = set(dev_dataset['labels'])
+        num_labels = len(label_set)
 
     model = get_model(model_name_or_path, num_labels)
     model.to("cpu" if use_cpu else "cuda")

@@ -2,6 +2,8 @@ import copy
 import os
 import sys
 
+from transformers.trainer_utils import get_last_checkpoint
+
 if os.path.exists('/dccstor'):
     os.environ['TRANSFORMERS_CACHE'] = '/dccstor/sum-datasets/users/ofir.arviv/transformers_cache'
     os.environ['HF_HOME'] = '/dccstor/sum-datasets/ofir.arviv/transformers_cache'
@@ -464,6 +466,8 @@ def predict_script(model_name_or_path: str, dataset_key: str, split: str = "vali
             labels = cached_dict['labels']
 
             return logits_per_classifier, labels
+
+    model_name_or_path = get_last_checkpoint(model_name_or_path)
 
     tokenizer = get_tokenizer(model_name_or_path)
 

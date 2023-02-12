@@ -429,9 +429,8 @@ def _save_model_outputs_to_cache(model_name_or_path: str, dataset_key: str, spli
         json.dump(output_dic, f, indent=4)
 
 
-def _get_model_outputs_from_cache(model_name_or_path: str, dataset_key: str, split: str,
+def _get_model_outputs_from_cache(model_name_or_path: str, dataset_key: str, output_dir: str, split: str,
                                   max_examples: Optional[int]) -> Optional[Dict]:
-    output_dir = "models_output"
     model_name = model_name_or_path.split("models/")[1].replace("\\", "/").split("/")[0]
     output_path = f'{output_dir}/model_{model_name}_dataset_{dataset_key}_split_{split}'
     if max_examples is not None:
@@ -456,11 +455,11 @@ def _get_model_outputs_from_cache(model_name_or_path: str, dataset_key: str, spl
     return output_dict
 
 
-def predict_script(model_name_or_path: str, dataset_key: str, split: str = "validation",
+def predict_script(model_name_or_path: str, dataset_key: str, output_dir: str,  split: str = "validation",
                    use_cpu: bool = True, use_cache: bool = True,
                    max_examples: Optional[int] = None) -> Tuple[Dict[int, torch.Tensor], List[int]]:
     if use_cache:
-        cached_dict = _get_model_outputs_from_cache(model_name_or_path, dataset_key, split, max_examples)
+        cached_dict = _get_model_outputs_from_cache(model_name_or_path, dataset_key, output_dir, split, max_examples)
         if cached_dict is not None:
             logits_per_classifier = cached_dict['logits_per_classifier']
             labels = cached_dict['labels']
@@ -978,6 +977,7 @@ if __name__ == '__main__':
     parser_experiment.set_defaults(which='experiment')
     parser_experiment.add_argument('-i', '--model-name-or-path', required=True, type=str)
     parser_experiment.add_argument('-d', '--dataset-key', required=True, type=str)
+    parser_train.add_argument('-o', '--output-dir', required=True, type=str)
     # endregion
 
     set_seed(42)
@@ -989,4 +989,4 @@ if __name__ == '__main__':
     elif args.which == "experiment":
         experiment_script(args.model_name_or_path, args.dataset_key)
     elif args.which == "predict":
-        predict_script(args.model_name_or_path, args.dataset_key)
+        predict_script(args.model_name_or_path, args.dataset_key, args.output_dir)

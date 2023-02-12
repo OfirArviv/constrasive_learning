@@ -970,6 +970,8 @@ if __name__ == '__main__':
     parser_predict.set_defaults(which='experiment')
     parser_predict.add_argument('-i', '--model-name-or-path', required=True, type=str)
     parser_predict.add_argument('-d', '--dataset-key', required=True, type=str)
+    parser_predict.add_argument('-o', '--output-dir', required=True, type=str)
+
     # endregion
 
     # region Expriment argparser
@@ -977,7 +979,6 @@ if __name__ == '__main__':
     parser_experiment.set_defaults(which='experiment')
     parser_experiment.add_argument('-i', '--model-name-or-path', required=True, type=str)
     parser_experiment.add_argument('-d', '--dataset-key', required=True, type=str)
-    parser_train.add_argument('-o', '--output-dir', required=True, type=str)
     # endregion
 
     set_seed(42)

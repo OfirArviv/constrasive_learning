@@ -967,7 +967,7 @@ if __name__ == '__main__':
 
     # region Predict argparser
     parser_predict = subparsers.add_parser('predict', help='')
-    parser_predict.set_defaults(which='experiment')
+    parser_predict.set_defaults(which='predict')
     parser_predict.add_argument('-i', '--model-name-or-path', required=True, type=str)
     parser_predict.add_argument('-d', '--dataset-key', required=True, type=str)
     parser_predict.add_argument('-o', '--output-dir', required=True, type=str)

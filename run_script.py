@@ -962,6 +962,13 @@ if __name__ == '__main__':
 
     # endregion
 
+    # region Predict argparser
+    parser_predict = subparsers.add_parser('predict', help='')
+    parser_predict.set_defaults(which='experiment')
+    parser_predict.add_argument('-i', '--model-name-or-path', required=True, type=str)
+    parser_predict.add_argument('-d', '--dataset-key', required=True, type=str)
+    # endregion
+
     # region Expriment argparser
     parser_experiment = subparsers.add_parser('experiment', help='')
     parser_experiment.set_defaults(which='experiment')
@@ -975,5 +982,7 @@ if __name__ == '__main__':
 
     if args.which == "train":
         train_script(args.dataset_key, args.share_classifiers_weights, args.output_dir, args.max_train_examples)
-    if args.which == "experiment":
+    elif args.which == "experiment":
         experiment_script(args.model_name_or_path, args.dataset_key)
+    elif args.which == "predict":
+        predict_script(args.model_name_or_path, args.dataset_key)

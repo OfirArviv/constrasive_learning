@@ -298,21 +298,21 @@ def get_processed_dataset(dataset_key: str, split: str, tokenizer: PreTrainedTok
             split = "test"
         dataset_preprocess_func = preprocess_basic_classification_dataset
         dataset = load_dataset(dataset_key, split=split)
-    elif dataset_key == "clinc_oos":
+    elif dataset_key == "clinc-oos":
         dataset_specific_args = {
             "source_column": "text",
             "label_column": "intent",
         }
         dataset_preprocess_func = preprocess_basic_classification_dataset
-        dataset = load_dataset(dataset_key, name='plus', split=split)
-    elif dataset_key == "go_emotions":
+        dataset = load_dataset("clinc-oos", name='plus', split=split)
+    elif dataset_key == "go-emotions":
         dataset_specific_args = {
             "source_column": "text",
             "label_column": "labels",
             "num_labels": 28
         }
         dataset_preprocess_func = preprocess_multi_label_classification_dataset
-        dataset = load_dataset(dataset_key, name='simplified', split=split)
+        dataset = load_dataset("go_emotions", name='simplified', split=split)
     else:
         raise NotImplementedError(dataset_key)
 

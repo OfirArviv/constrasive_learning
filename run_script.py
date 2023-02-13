@@ -189,7 +189,7 @@ def preprocess_multi_label_classification_example(examples,
     # with tokenizer.as_target_tokenizer():
     #   labels = tokenizer(labels, max_length=max_target_length, truncation=False)
     batch_size = len(labels)
-    formatted_labels =np.zeros([batch_size, num_labels])
+    formatted_labels = np.zeros([batch_size, num_labels])
     for i, labels_idxs in enumerate(labels):
         for idx in labels_idxs:
             formatted_labels[i][idx] = 1
@@ -353,6 +353,7 @@ def get_score(labels: List[int], prediction_per_classifier: Dict[str, List[int]]
 
 
 def get_model(model_name_or_path: str,
+              classifiers_layers: List[int],
               num_labels: Optional[int] = None,
               share_classifiers_weights: Optional[bool] = None
               ) -> PreTrainedModel:
@@ -362,9 +363,8 @@ def get_model(model_name_or_path: str,
                                                       'param share_classifiers_weights and thus it needs to be provided'
         assert num_labels is not None
         config.num_labels = num_labels
-        config.classifiers_layers = [1, 2, 4, 8, 12]
+        config.classifiers_layers = classifiers_layers
         config.share_classifiers_weights = share_classifiers_weights
-
 
     # TODO: For some reason this config isnt saved
     config.num_labels = num_labels
@@ -380,7 +380,7 @@ def get_tokenizer(model_name_or_path: str) -> PreTrainedTokenizerBase:
     return tokenizer
 
 
-def train_script(dataset_key: str, share_classifiers_weights: bool, output_dir: str,
+def train_script(dataset_key: str, share_classifiers_weights: bool, output_dir: str, classifiers_layers: List[int],
                  train_max_size: Optional[int], model_name: str = "bert-large-cased"):
     tokenizer = get_tokenizer(model_name)
 
@@ -395,7 +395,7 @@ def train_script(dataset_key: str, share_classifiers_weights: bool, output_dir: 
         label_set = set(train_dataset['labels'])
         num_labels = len(label_set)
 
-    model = get_model(model_name, num_labels, share_classifiers_weights)
+    model = get_model(model_name, classifiers_layers, num_labels, share_classifiers_weights)
     data_collator = DataCollatorWithPadding(tokenizer)
 
     use_cpu = True
@@ -404,9 +404,8 @@ def train_script(dataset_key: str, share_classifiers_weights: bool, output_dir: 
     train(model, tokenizer, train_dataset, dev_dataset, data_collator, output_dir, 20, no_cuda=use_cpu)
 
 
-def _save_model_outputs_to_cache(model_name_or_path: str, dataset_key: str, split: str, max_examples: Optional[int],
-                                 logits_per_classifier: Dict, labels: List) -> None:
-    output_dir = "models_output"
+def _save_model_outputs_to_cache(model_name_or_path: str, dataset_key: str, output_dir: str, split: str,
+                                 max_examples: Optional[int], logits_per_classifier: Dict, labels: List) -> None:
     model_name = model_name_or_path.split("models/")[1].replace("\\", "/").split("/")[0]
     output_path = f'{output_dir}/model_{model_name}_dataset_{dataset_key}_split_{split}'
     if max_examples is not None:
@@ -455,7 +454,7 @@ def _get_model_outputs_from_cache(model_name_or_path: str, dataset_key: str, out
     return output_dict
 
 
-def predict_script(model_name_or_path: str, dataset_key: str, output_dir: str,  split: str = "validation",
+def predict_script(model_name_or_path: str, dataset_key: str, output_dir: str, split: str = "validation",
                    use_cpu: bool = True, use_cache: bool = True,
                    max_examples: Optional[int] = None) -> Tuple[Dict[int, torch.Tensor], List[int]]:
     if use_cache:
@@ -495,7 +494,8 @@ def predict_script(model_name_or_path: str, dataset_key: str, output_dir: str,  
             for layer, l_logits in batch_logits.items():
                 logits_per_classifier[layer] = torch.concat([logits_per_classifier[layer], l_logits])
 
-    _save_model_outputs_to_cache(model_name_or_path, dataset_key, split, max_examples, logits_per_classifier, labels)
+    _save_model_outputs_to_cache(model_name_or_path, dataset_key, output_dir,
+                                 split, max_examples, logits_per_classifier, labels)
 
     return logits_per_classifier, labels
 
@@ -675,10 +675,11 @@ def get_layers_predictions_comparison(confidences_per_classifier: Dict[int, np.n
 # region Experiments
 
 def get_optimal_contrastive_thresholds(confidences_per_classifier: Dict[int, np.ndarray],
-                                       labels: List[int]) -> Dict:
-    layer_comparison_dict = get_layer_comparison_df(confidences_per_classifier, labels)
+                                       labels: List[int],
+                                       layers_combinations: List[str]) -> Dict:
+    layer_comparison_dict = get_layer_comparison_df(confidences_per_classifier, labels, layers_combinations)
     res_dict = dict()
-    for layers_selection in ["12_8", "12_4", "8_4"]:
+    for layers_selection in layers_combinations:
         df_both_correct_cnt = layer_comparison_dict[layers_selection]["both correct"]
         df_both_incorrect_cnt = layer_comparison_dict[layers_selection]["both incorrect"]
 
@@ -712,7 +713,8 @@ def get_native_oracle_contrastive_score(confidences_per_classifier: Dict[int, np
                                         labels: List[int]) -> Dict:
     data_overconfidence, data_higher_layer_confidence = \
         get_layers_predictions_comparison(confidences_per_classifier, labels, 0, 0)
-    thresholds_dict = get_optimal_contrastive_thresholds(confidences_per_classifier, labels)
+    thresholds_dict = get_optimal_contrastive_thresholds(confidences_per_classifier, labels,
+                                                         list(data_overconfidence.keys()))
 
     prediction_per_classifier = {l: np.argmax(confidences_per_classifier[l], axis=1).tolist()
                                  for l in confidences_per_classifier}
@@ -738,14 +740,15 @@ def get_native_oracle_contrastive_score(confidences_per_classifier: Dict[int, np
 
     res = {
         "scores": scores,
-        "optimal_scores": scores
+        "optimal_scores": optimal_scores
     }
 
     return res
 
 
 def get_layer_comparison_df(confidences_per_classifier: Dict[int, np.ndarray],
-                            labels: List[int]) -> Dict:
+                            labels: List[int],
+                            layers_combinations: List[str]) -> Dict:
     y_bins = list(np.round(np.linspace(0, 0.9, 10), 2))
     x_bins = list(np.round(np.linspace(0, 0.9, 10), 2))
 
@@ -761,7 +764,7 @@ def get_layer_comparison_df(confidences_per_classifier: Dict[int, np.ndarray],
         get_layers_predictions_comparison(confidences_per_classifier, labels, 0, 0)
 
     output_dict = dict()
-    for i, layers_selection in enumerate(["12_8", "12_4", "8_4"]):
+    for i, layers_selection in enumerate(layers_combinations):
         df_both_correct_cnt = df.copy(deep=True)
         df_both_incorrect_cnt = df.copy(deep=True)
 
@@ -834,13 +837,15 @@ def plot_layer_comparison_heatmap_for_all_models(split: str = "validation"):
         plot_layer_comparison_heatmap(calibrated_confidence_per_classifier, labels, f'{dataset_key}: {split}')
 
 
-def batch_run(split: str = "validation"):
+def batch_run(split: str = "validation", output_dir: str = "models_output"):
     for model_dir in glob.glob("models/*"):
         dataset_key = os.path.basename(model_dir).split("_")[0]
-        if dataset_key in ["boolq"]:
+        if dataset_key not in ["boolq", "go_emotions"]:
             continue
+        dataset_key = "go_emotions"
         model_path = f'{model_dir}/data/'
-        logits_per_classifier, labels = predict_script(model_path, dataset_key, split=split)
+        model_path = f'{"models/go_emotions_not_shared_bert"}/data/'
+        logits_per_classifier, labels = predict_script(model_path, dataset_key, output_dir, split=split)
         confidence_per_classifier = {l: torch.nn.Softmax(dim=1)(logits_per_classifier[l]).cpu().numpy()
                                      for l in logits_per_classifier.keys()}
         calibrated_confidence_per_classifier = temperature_calibration(confidence_per_classifier, labels)
@@ -949,6 +954,28 @@ def get_contrastive_score_diff_for_all_models():
         print_contrastive_results_comparison(model_path, dataset_key)
 
 
+def test_swag():
+    ending_names = ["ending0", "ending1", "ending2", "ending3"]
+    tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
+
+    def preprocess_function(examples):
+        first_sentences = [[context] * 4 for context in examples["sent1"]]
+        question_headers = examples["sent2"]
+        second_sentences = [
+            [f"{header} {examples[end][i]}" for end in ending_names] for i, header in enumerate(question_headers)
+        ]
+
+        first_sentences = sum(first_sentences, [])
+        second_sentences = sum(second_sentences, [])
+
+        tokenized_examples = tokenizer(first_sentences, second_sentences, truncation=True)
+        return {k: [v[i: i + 4] for i in range(0, len(v), 4)] for k, v in tokenized_examples.items()}
+
+    swag = load_dataset("swag", "regular")
+
+    tokenized_swag = swag.map(preprocess_function, batched=True)
+
+
 if __name__ == '__main__':
     # TODO:
     # 1) Use RoBERTa instead of BERT
@@ -956,6 +983,7 @@ if __name__ == '__main__':
     # 3) Analyze
     # batch_run()
     # exit()
+    # test_swag()
 
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(help='sub-command help')
@@ -967,6 +995,7 @@ if __name__ == '__main__':
     parser_train.add_argument('-o', '--output-dir', required=True, type=str)
     parser_train.add_argument('-s', '--share-classifiers-weights', action='store_true')
     parser_train.add_argument('-m', '--max-train-examples', type=int, required=False, default=None)
+    parser_train.add_argument('-l', '--classifiers-layers', nargs='+', required=False, default=[1, 2, 4, 8, 12])
 
     # endregion
 
@@ -991,7 +1020,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     if args.which == "train":
-        train_script(args.dataset_key, args.share_classifiers_weights, args.output_dir, args.max_train_examples)
+        train_script(args.dataset_key, args.share_classifiers_weights, args.output_dir,
+                     args.classifiers_layers, args.max_train_examples)
     elif args.which == "experiment":
         experiment_script(args.model_name_or_path, args.dataset_key)
     elif args.which == "predict":

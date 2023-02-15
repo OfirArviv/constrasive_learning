@@ -995,7 +995,7 @@ if __name__ == '__main__':
     parser_train.add_argument('-o', '--output-dir', required=True, type=str)
     parser_train.add_argument('-s', '--share-classifiers-weights', action='store_true')
     parser_train.add_argument('-m', '--max-train-examples', type=int, required=False, default=None)
-    parser_train.add_argument('-l', '--classifiers-layers', nargs='+', required=False, default=[1, 2, 4, 8, 12])
+    parser_train.add_argument('-l', '--classifiers-layers', nargs='+', required=False, default=[1, 2, 4, 8, 12], type=int)
 
     # endregion
 

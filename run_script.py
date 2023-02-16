@@ -502,7 +502,6 @@ def predict_script(model_name_or_path: str, dataset_key: str, output_dir: str, s
 
 # endregion
 
-
 # region Uncertainty Calibration
 
 def _adjust_binary_confidences(confidences_per_classifier: Dict[int, np.ndarray]) -> Dict[int, np.ndarray]:
@@ -563,7 +562,6 @@ def temperature_calibration(confidences_per_classifier: Dict[int, np.ndarray],
 
 
 # endregion
-
 
 # region Contrastive Utils
 
@@ -976,6 +974,41 @@ def test_swag():
     tokenized_swag = swag.map(preprocess_function, batched=True)
 
 
+def predict_script2(model_name_or_path: str, dataset_key: str, output_dir: str, split: str = "validation",
+                    use_cpu: bool = False,
+                    max_examples: Optional[int] = None) -> Tuple[Dict[int, torch.Tensor], List[int]]:
+    tokenizer = get_tokenizer(model_name_or_path)
+    dev_dataset = get_processed_dataset(dataset_key, split, tokenizer, max_examples)
+    labels = dev_dataset['labels']
+    sample_label = labels[0]
+    if isinstance(sample_label, list):
+        num_labels = len(sample_label)
+    else:
+        label_set = set(dev_dataset['labels'])
+        num_labels = len(label_set)
+
+    model = get_model(model_name_or_path, num_labels)
+    model.to("cpu" if use_cpu else "cuda")
+
+    data_collator: DataCollator = DataCollatorWithPadding(tokenizer)
+
+    logits_per_classifier = {l: torch.empty(0, model.config.num_labels, device="cpu" if use_cpu else "cuda")
+                             for l in model.config.classifiers_layers}
+    with torch.no_grad():
+        batch_size = 8
+        for i in tqdm(range(0, len(dev_dataset), batch_size)):
+            tokenized_inputs = data_collator(dev_dataset[i:min(i + batch_size, len(dev_dataset))]).to(
+                "cpu" if use_cpu else "cuda")
+            batch_logits = model(**tokenized_inputs).logits
+            for layer, l_logits in batch_logits.items():
+                logits_per_classifier[layer] = torch.concat([logits_per_classifier[layer], l_logits])
+
+    _save_model_outputs_to_cache(model_name_or_path, dataset_key, output_dir,
+                                 split, max_examples, logits_per_classifier, labels)
+
+    return logits_per_classifier, labels
+
+
 if __name__ == '__main__':
     # TODO:
     # 1) Use RoBERTa instead of BERT
@@ -995,7 +1028,8 @@ if __name__ == '__main__':
     parser_train.add_argument('-o', '--output-dir', required=True, type=str)
     parser_train.add_argument('-s', '--share-classifiers-weights', action='store_true')
     parser_train.add_argument('-m', '--max-train-examples', type=int, required=False, default=None)
-    parser_train.add_argument('-l', '--classifiers-layers', nargs='+', required=False, default=[1, 2, 4, 8, 12], type=int)
+    parser_train.add_argument('-l', '--classifiers-layers', nargs='+', required=False, default=[1, 2, 4, 8, 12],
+                              type=int)
 
     # endregion
 
@@ -1008,7 +1042,7 @@ if __name__ == '__main__':
 
     # endregion
 
-    # region Expriment argparser
+    # region Experiment argparser
     parser_experiment = subparsers.add_parser('experiment', help='')
     parser_experiment.set_defaults(which='experiment')
     parser_experiment.add_argument('-i', '--model-name-or-path', required=True, type=str)
@@ -1025,4 +1059,9 @@ if __name__ == '__main__':
     elif args.which == "experiment":
         experiment_script(args.model_name_or_path, args.dataset_key)
     elif args.which == "predict":
-        predict_script(args.model_name_or_path, args.dataset_key, args.output_dir)
+        predict_script2(args.model_name_or_path, args.dataset_key, args.output_dir)
+
+# TODO:
+# Different checkpoints
+# Zero-shot
+# more weight to the upper layer

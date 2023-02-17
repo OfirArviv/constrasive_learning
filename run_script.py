@@ -353,7 +353,7 @@ def get_score(labels: List[int], prediction_per_classifier: Dict[str, List[int]]
 
 
 def get_model(model_name_or_path: str,
-              classifiers_layers: List[int],
+              classifiers_layers: List[int] = None,
               num_labels: Optional[int] = None,
               share_classifiers_weights: Optional[bool] = None
               ) -> PreTrainedModel:
@@ -367,8 +367,9 @@ def get_model(model_name_or_path: str,
         config.share_classifiers_weights = share_classifiers_weights
 
     # TODO: For some reason this config isnt saved
-    config.num_labels = num_labels
-    config.problem_type = None
+    else:
+        config.num_labels = num_labels
+        config.problem_type = None
 
     model = ContrastiveBertForSequenceClassification.from_pretrained(model_name_or_path, config=config)
 
@@ -406,7 +407,7 @@ def train_script(dataset_key: str, share_classifiers_weights: bool, output_dir: 
 
 def _save_model_outputs_to_cache(model_name_or_path: str, dataset_key: str, output_dir: str, split: str,
                                  max_examples: Optional[int], logits_per_classifier: Dict, labels: List) -> None:
-    model_name = model_name_or_path.split("models/")[1].replace("\\", "/").split("/")[0]
+    model_name = model_name_or_path.replace("\\", "_").replace("/", "_")
     output_path = f'{output_dir}/model_{model_name}_dataset_{dataset_key}_split_{split}'
     if max_examples is not None:
         output_path = f'{output_path}_max_examples_{max_examples}'
@@ -975,7 +976,6 @@ def test_swag():
 
 
 def predict_script2(model_name_or_path: str, dataset_key: str, output_dir: str, split: str = "validation",
-                    use_cpu: bool = False,
                     max_examples: Optional[int] = None) -> Tuple[Dict[int, torch.Tensor], List[int]]:
     tokenizer = get_tokenizer(model_name_or_path)
     dev_dataset = get_processed_dataset(dataset_key, split, tokenizer, max_examples)
@@ -987,7 +987,8 @@ def predict_script2(model_name_or_path: str, dataset_key: str, output_dir: str, 
         label_set = set(dev_dataset['labels'])
         num_labels = len(label_set)
 
-    model = get_model(model_name_or_path, num_labels)
+    model = get_model(model_name_or_path, num_labels=num_labels)
+    use_cpu = torch.cuda.is_available()
     model.to("cpu" if use_cpu else "cuda")
 
     data_collator: DataCollator = DataCollatorWithPadding(tokenizer)
@@ -1065,3 +1066,9 @@ if __name__ == '__main__':
 # Different checkpoints
 # Zero-shot
 # more weight to the upper layer
+
+# Create load predictions function
+# Edit the current pred with it, see fi ther are bugs
+# create for multiple run indiffernet files
+# create for zero shot in differnet file
+

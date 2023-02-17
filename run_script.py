@@ -382,7 +382,7 @@ def get_tokenizer(model_name_or_path: str) -> PreTrainedTokenizerBase:
 
 
 def train_script(dataset_key: str, share_classifiers_weights: bool, output_dir: str, classifiers_layers: List[int],
-                 train_max_size: Optional[int], model_name: str = "bert-large-cased"):
+                 train_max_size: Optional[int], model_name: str):
     tokenizer = get_tokenizer(model_name)
 
     train_dataset = get_processed_dataset(dataset_key, "train", tokenizer, train_max_size)
@@ -1025,10 +1025,11 @@ if __name__ == '__main__':
     # region Train argparser
     parser_train = subparsers.add_parser('train', help='')
     parser_train.set_defaults(which='train')
+    parser_train.add_argument('-m', '--model-name', type=str, default="bert-large-cased")
     parser_train.add_argument('-d', '--dataset-key', required=True, type=str)
     parser_train.add_argument('-o', '--output-dir', required=True, type=str)
     parser_train.add_argument('-s', '--share-classifiers-weights', action='store_true')
-    parser_train.add_argument('-m', '--max-train-examples', type=int, required=False, default=None)
+    parser_train.add_argument('-c', '--max-train-examples', type=int, required=False, default=None)
     parser_train.add_argument('-l', '--classifiers-layers', nargs='+', required=False, default=[1, 2, 4, 8, 12],
                               type=int)
 
@@ -1056,7 +1057,7 @@ if __name__ == '__main__':
 
     if args.which == "train":
         train_script(args.dataset_key, args.share_classifiers_weights, args.output_dir,
-                     args.classifiers_layers, args.max_train_examples)
+                     args.classifiers_layers, args.max_train_examples, args.model_name)
     elif args.which == "experiment":
         experiment_script(args.model_name_or_path, args.dataset_key)
     elif args.which == "predict":

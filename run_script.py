@@ -402,7 +402,7 @@ def train_script(dataset_key: str, share_classifiers_weights: bool, output_dir: 
     use_cpu = True
     model.to("cpu" if use_cpu else "cuda")
 
-    train(model, tokenizer, train_dataset, dev_dataset, data_collator, output_dir, 20, no_cuda=use_cpu)
+    train(model, tokenizer, train_dataset, dev_dataset, data_collator, output_dir, 5, no_cuda=use_cpu)
 
 
 def _save_model_outputs_to_cache(model_name_or_path: str, dataset_key: str, output_dir: str, split: str,

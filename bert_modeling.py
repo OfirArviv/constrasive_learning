@@ -152,6 +152,12 @@ class ContrastiveBertForSequenceClassification(BertPreTrainedModel):
 
         self.classifiers_layers = config.classifiers_layers
 
+        head_count = len(self.classifiers_layers)
+        if head_count > 1:
+            self.heads_loss_weight = torch.tensor([0.9] + [(0.1/(head_count-1))]*(head_count-1))
+        else:
+            self.heads_loss_weight = torch.tensor([1])
+
         self.share_classifiers_weights = config.share_classifiers_weights
         if self.share_classifiers_weights:
             self.classifier = nn.Linear(config.hidden_size, config.num_labels)
@@ -251,7 +257,7 @@ class ContrastiveBertForSequenceClassification(BertPreTrainedModel):
             else:
                 raise NotImplementedError(self.config.problem_type)
 
-            loss = torch.stack(list(loss_per_classifier.values())).sum()
+            loss = torch.matmul(torch.stack(list(loss_per_classifier.values())), torch.tensor(self.heads_loss_weight))
 
         if not return_dict:
             # output = (logits,) + outputs[2:]

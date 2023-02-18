@@ -789,11 +789,12 @@ def get_layer_comparison_df(confidences_per_classifier: Dict[int, np.ndarray],
 
 def plot_layer_comparison_heatmap(confidences_per_classifier: Dict[int, np.ndarray],
                                   labels: List[int],
-                                  title_prefix: str):
-    layer_comparison_dict = get_layer_comparison_df(confidences_per_classifier, labels)
+                                  title_prefix: str,
+                                  layers_combinations: List[str]):
+    layer_comparison_dict = get_layer_comparison_df(confidences_per_classifier, labels, layers_combinations)
 
     fig, axs = plt.subplots(ncols=3, figsize=(21, 7))
-    for i, layers_selection in enumerate(["12_8", "12_4", "8_4"]):
+    for i, layers_selection in enumerate(["9500_500"]):
         df_both_correct_cnt = layer_comparison_dict[layers_selection]["both correct"]
         df_both_incorrect_cnt = layer_comparison_dict[layers_selection]["both incorrect"]
 
@@ -1010,6 +1011,53 @@ def predict_script2(model_name_or_path: str, dataset_key: str, output_dir: str, 
     return logits_per_classifier, labels
 
 
+def combine_output():
+    f1_path = "model_output/model_.._models_go-emotions_layer_12_not_shared_bert_data_go-emotions_layer_12_not_shared_bert_2_checkpoint-500__dataset_go-emotions_split_validation.json"
+    f2_path = "model_output/model_.._models_go-emotions_layer_12_not_shared_bert_data_go-emotions_layer_12_not_shared_bert_2_checkpoint-9500__dataset_go-emotions_split_validation.json"
+
+    logits_per_classifier = dict()
+    labels = []
+    with open(f1_path, 'r', encoding='utf-8') as f_500:
+        data_500 = json.load(f_500)
+        logits_per_classifier['500'] = data_500['logits_per_classifier']['12']
+        labels = data_500['labels']
+
+    with open(f2_path, 'r', encoding='utf-8') as f_9500:
+        data_9500 = json.load(f_9500)
+        logits_per_classifier['9500'] = data_9500['logits_per_classifier']['12']
+        assert labels == data_9500['labels']
+
+    output = {
+        "logits_per_classifier": logits_per_classifier,
+        "labels": labels
+    }
+
+    output_path = "model_output/go_emotions_500_9500.json"
+    with open(output_path, 'w', encoding='utf-8') as f:
+        json.dump(output, f)
+
+
+
+def load_file():
+    file_path = "model_output/go_emotions_500_9500.json"
+    with open(file_path, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+    logits_per_classifier, labels = data['logits_per_classifier'], data['labels']
+
+    formatted_logits_per_classifier = dict()
+    for k in logits_per_classifier.keys():
+        logits = logits_per_classifier[k]
+        logits = torch.tensor(logits)
+        formatted_logits_per_classifier[int(k)] = logits
+
+    logits_per_classifier = formatted_logits_per_classifier
+
+    print(len(labels))
+    confidence_per_classifier = {l: torch.nn.Softmax(dim=1)(logits_per_classifier[l]).cpu().numpy()
+                                 for l in logits_per_classifier.keys()}
+    calibrated_confidence_per_classifier = temperature_calibration(confidence_per_classifier, labels)
+    plot_layer_comparison_heatmap(calibrated_confidence_per_classifier, labels, f'9500-500', ['9500_500'])
+
 if __name__ == '__main__':
     # TODO:
     # 1) Use RoBERTa instead of BERT
@@ -1018,6 +1066,9 @@ if __name__ == '__main__':
     # batch_run()
     # exit()
     # test_swag()
+    # combine_output()
+    # load_file()
+    # exit()
 
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(help='sub-command help')
@@ -1072,4 +1123,5 @@ if __name__ == '__main__':
 # Edit the current pred with it, see fi ther are bugs
 # create for multiple run indiffernet files
 # create for zero shot in differnet file
-
+# Parsing - UD
+# Rub stuff so the loss for the upper layer is 90

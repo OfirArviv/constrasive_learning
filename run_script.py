@@ -1076,7 +1076,7 @@ if __name__ == '__main__':
     # region Train argparser
     parser_train = subparsers.add_parser('train', help='')
     parser_train.set_defaults(which='train')
-    parser_train.add_argument('-m', '--model-name', type=str, default="bert-large-cased")
+    parser_train.add_argument('-m', '--model-name', type=str, default="bert-base-multilingual-cased")
     parser_train.add_argument('-d', '--dataset-key', required=True, type=str)
     parser_train.add_argument('-o', '--output-dir', required=True, type=str)
     parser_train.add_argument('-s', '--share-classifiers-weights', action='store_true')

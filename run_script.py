@@ -313,6 +313,15 @@ def get_processed_dataset(dataset_key: str, split: str, tokenizer: PreTrainedTok
         }
         dataset_preprocess_func = preprocess_multi_label_classification_dataset
         dataset = load_dataset("go_emotions", name='simplified', split=split)
+    elif "xnli" in dataset_key:
+        lang = dataset_key.split("xnli_")[1]
+        dataset_specific_args = {
+            "input_column_1": "premise",
+            "input_column_2": "hypothesis",
+            "label_column": "label",
+        }
+        dataset_preprocess_func = preprocess_pair_classification_dataset
+        dataset = load_dataset("xnli", name=lang, split=split)
     else:
         raise NotImplementedError(dataset_key)
 

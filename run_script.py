@@ -802,8 +802,8 @@ def plot_layer_comparison_heatmap(confidences_per_classifier: Dict[int, np.ndarr
                                   layers_combinations: List[str]):
     layer_comparison_dict = get_layer_comparison_df(confidences_per_classifier, labels, layers_combinations)
 
-    fig, axs = plt.subplots(ncols=3, figsize=(21, 7))
-    for i, layers_selection in enumerate(["9500_500"]):
+    fig, axs = plt.subplots(ncols=len(layers_combinations), figsize=(7*len(layers_combinations), 7))
+    for i, layers_selection in enumerate(layers_combinations):
         df_both_correct_cnt = layer_comparison_dict[layers_selection]["both correct"]
         df_both_incorrect_cnt = layer_comparison_dict[layers_selection]["both incorrect"]
 
@@ -1048,7 +1048,7 @@ def combine_output():
 
 
 def load_file():
-    file_path = "model_output/go_emotions_500_9500.json"
+    file_path = "model_output/model_.._models_data_weighted_loss_mbert_mnli_checkpoint-3400__dataset_xnli_vi_split_validation.json"
     with open(file_path, 'r', encoding='utf-8') as f:
         data = json.load(f)
     logits_per_classifier, labels = data['logits_per_classifier'], data['labels']
@@ -1065,7 +1065,7 @@ def load_file():
     confidence_per_classifier = {l: torch.nn.Softmax(dim=1)(logits_per_classifier[l]).cpu().numpy()
                                  for l in logits_per_classifier.keys()}
     calibrated_confidence_per_classifier = temperature_calibration(confidence_per_classifier, labels)
-    plot_layer_comparison_heatmap(calibrated_confidence_per_classifier, labels, f'9500-500', ['9500_500'])
+    plot_layer_comparison_heatmap(calibrated_confidence_per_classifier, labels, f'9500-500', ['12_8', '12_4', '12_2', '12_1'])
 
 if __name__ == '__main__':
     # TODO:
@@ -1134,3 +1134,9 @@ if __name__ == '__main__':
 # create for zero shot in differnet file
 # Parsing - UD
 # Rub stuff so the loss for the upper layer is 90
+# few shot vs english only
+
+# Write finetune code, write ud code
+# LM contrastive for Ud parsinf seq1seq
+
+# TRu multilingual few shot!!! ust a few!! vand compare modeks!!

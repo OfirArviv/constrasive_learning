@@ -38,7 +38,7 @@ if __name__ == '__main__':
 
     args, extra_args = parser.parse_known_args()
 
-    for dataset in ["mnli"]: # "banking77", "sst2",  "snli", "boolq", "wnli", "cola", "mrpc", "qqp",
+    for dataset in ["mnli"]: # "banking77", "sst2", "snli", "boolq", "wnli", "cola", "mrpc", "qqp",
         output_dir = f'{args.output_dir}'
         log_dir = os.path.join(output_dir, 'log')
         os.makedirs(log_dir, exist_ok=True)

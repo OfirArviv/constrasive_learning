@@ -408,7 +408,7 @@ def train_script(dataset_key: str, share_classifiers_weights: bool, output_dir: 
     model = get_model(model_name, classifiers_layers, num_labels, share_classifiers_weights)
     data_collator = DataCollatorWithPadding(tokenizer)
 
-    use_cpu = use_cpu = torch.cuda.is_available()
+    use_cpu = not torch.cuda.is_available()
     model.to("cpu" if use_cpu else "cuda")
 
     train(model, tokenizer, train_dataset, dev_dataset, data_collator, output_dir, 5, no_cuda=use_cpu)
